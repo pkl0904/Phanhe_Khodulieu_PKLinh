@@ -976,8 +976,17 @@ export default function App() {
   const [selectedVersionSnapshot, setSelectedVersionSnapshot] = useState<any | null>(null);
   const [logFilters, setLogFilters] = useState({
     statuses: [] as string[],
-    creators: [] as string[]
+    creators: [] as string[],
+    dateRange: { start: '', end: '' }
   });
+  const [versionFilters, setVersionFilters] = useState({
+    creators: [] as string[],
+    dateRange: { start: '', end: '' }
+  });
+  const [versionSearchQuery, setVersionSearchQuery] = useState('');
+  const [versionCurrentPage, setVersionCurrentPage] = useState(1);
+  const [isVersionFilterOpen, setIsVersionFilterOpen] = useState(false);
+  const [tempVersionFilters, setTempVersionFilters] = useState(versionFilters);
   const [tempLogFilters, setTempLogFilters] = useState(logFilters);
   const [activeReconMenu, setActiveReconMenu] = useState<string | null>(null);
   const [activeDetailReconMenu, setActiveDetailReconMenu] = useState<string | null>(null);
@@ -1538,6 +1547,21 @@ export default function App() {
   };
 
   const activeLogFiltersCount = Object.entries(logFilters).reduce((acc, [key, value]) => {
+    if (key === 'dateRange') {
+      const dr = value as { start: string, end: string };
+      return acc + (dr.start ? 1 : 0) + (dr.end ? 1 : 0);
+    }
+    if (Array.isArray(value)) {
+      return acc + (value.length > 0 ? 1 : 0);
+    }
+    return acc + (value ? 1 : 0);
+  }, 0);
+
+  const activeVersionFiltersCount = Object.entries(versionFilters).reduce((acc, [key, value]) => {
+    if (key === 'dateRange') {
+      const dr = value as { start: string, end: string };
+      return acc + (dr.start ? 1 : 0) + (dr.end ? 1 : 0);
+    }
     if (Array.isArray(value)) {
       return acc + (value.length > 0 ? 1 : 0);
     }
@@ -5284,52 +5308,54 @@ export default function App() {
 
             {detailTab === 'logs' && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-[500px]">
-                <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4 shrink-0 relative">
-                  <div className="flex items-center gap-2 font-bold text-gray-900">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4 shrink-0 relative bg-white">
+                  <div className="font-bold text-gray-900 whitespace-nowrap">
                     Lịch sử thay đổi
                   </div>
-                  <div className="relative flex-1 max-w-xs">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  
+                  <div className="relative flex-1 max-w-lg">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input 
                       type="text" 
                       placeholder="Tìm kiếm nhật ký..." 
-                      className="w-full pl-9 pr-4 py-1.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                       value={logSearchQuery}
                       onChange={(e) => { setLogSearchQuery(e.target.value); setLogCurrentPage(1); }}
                     />
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  <div className="flex items-center gap-4">
                     <button 
                       onClick={() => {
                         if (!isFilterOpen) setTempLogFilters(logFilters);
                         setIsFilterOpen(!isFilterOpen);
                       }}
                       className={cn(
-                        "p-1.5 rounded-lg border transition-all relative",
+                        "p-2 rounded-lg transition-all relative border",
                         isFilterOpen ? "bg-blue-50 border-blue-200 text-blue-600" : "text-gray-500 border-transparent hover:bg-gray-100"
                       )}
                       title="Lọc"
                     >
-                      <Filter size={18} />
+                      <Filter size={20} />
                       {activeLogFiltersCount > 0 && (
-                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white shadow-sm">
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                           {activeLogFiltersCount}
                         </span>
                       )}
                     </button>
                     <button 
-                      onClick={() => { setLogSearchQuery(''); setLogCurrentPage(1); setLogFilters({ statuses: [], creators: [] }); setTempLogFilters({ statuses: [], creators: [] }); setLogSortConfig(null); }}
-                      className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" 
+                      onClick={() => { setLogSearchQuery(''); setLogCurrentPage(1); setLogFilters({ statuses: [], creators: [], dateRange: { start: '', end: '' } }); setTempLogFilters({ statuses: [], creators: [], dateRange: { start: '', end: '' } }); setLogSortConfig(null); }}
+                      className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent" 
                       title="Làm mới"
                     >
-                      <RefreshCw size={18} />
+                      <RefreshCw size={20} />
                     </button>
                     <button 
                       onClick={() => handleDownload(MOCK_EVENT_LOGS, `nhat-ky-${selectedSource.name}`)}
-                      className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" 
+                      className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent" 
                       title="Tải về"
                     >
-                      <Download size={18} />
+                      <Download size={20} />
                     </button>
                   </div>
 
@@ -5366,11 +5392,28 @@ export default function App() {
                             onChange={(vals) => setTempLogFilters({...tempLogFilters, creators: vals})}
                             placeholder="Tất cả"
                           />
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Khoảng thời gian</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input 
+                                type="date" 
+                                className="w-full px-2 py-1.5 text-[10px] rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                value={tempLogFilters.dateRange.start}
+                                onChange={(e) => setTempLogFilters({...tempLogFilters, dateRange: {...tempLogFilters.dateRange, start: e.target.value}})}
+                              />
+                              <input 
+                                type="date" 
+                                className="w-full px-2 py-1.5 text-[10px] rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                value={tempLogFilters.dateRange.end}
+                                onChange={(e) => setTempLogFilters({...tempLogFilters, dateRange: {...tempLogFilters.dateRange, end: e.target.value}})}
+                              />
+                            </div>
+                          </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                           <button 
                             onClick={() => {
-                              const reset = { statuses: [], creators: [] };
+                              const reset = { statuses: [], creators: [], dateRange: { start: '', end: '' } };
                               setTempLogFilters(reset);
                               setLogFilters(reset);
                               setLogCurrentPage(1);
@@ -5461,6 +5504,13 @@ export default function App() {
                         .filter(l => l.name.toLowerCase().includes(logSearchQuery.toLowerCase()))
                         .filter(l => logFilters.statuses.length === 0 || logFilters.statuses.includes(l.status))
                         .filter(l => logFilters.creators.length === 0 || logFilters.creators.includes(l.modifiedBy))
+                        .filter(l => {
+                          if (!logFilters.dateRange.start && !logFilters.dateRange.end) return true;
+                          const logTime = new Date(l.startTime || '').getTime();
+                          const start = logFilters.dateRange.start ? new Date(logFilters.dateRange.start).getTime() : 0;
+                          const end = logFilters.dateRange.end ? new Date(logFilters.dateRange.end).getTime() + 86399999 : Infinity;
+                          return logTime >= start && logTime <= end;
+                        })
                         .sort((a, b) => {
                           if (!logSortConfig) return 0;
                           const { key, direction } = logSortConfig;
@@ -5519,16 +5569,127 @@ export default function App() {
             )}
 
             {detailTab === 'versions' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
-                  <h2 className="font-bold text-gray-900 flex items-center gap-2">
-                    <History size={18} className="text-blue-600" />
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-[500px]">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4 shrink-0 relative bg-white">
+                  <div className="font-bold text-gray-900 whitespace-nowrap">
                     Lịch sử thiết lập tiêu chí
-                  </h2>
+                  </div>
+                  
+                  <div className="relative flex-1 max-w-lg">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <input 
+                      type="text" 
+                      placeholder="Tìm kiếm phiên bản..." 
+                      className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      value={versionSearchQuery}
+                      onChange={(e) => { setVersionSearchQuery(e.target.value); setVersionCurrentPage(1); }}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => {
+                        if (!isVersionFilterOpen) setTempVersionFilters(versionFilters);
+                        setIsVersionFilterOpen(!isVersionFilterOpen);
+                      }}
+                      className={cn(
+                        "p-2 rounded-lg transition-all relative border",
+                        isVersionFilterOpen ? "bg-blue-50 border-blue-200 text-blue-600" : "text-gray-500 border-transparent hover:bg-gray-100"
+                      )}
+                      title="Lọc"
+                    >
+                      <Filter size={20} />
+                      {activeVersionFiltersCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                          {activeVersionFiltersCount}
+                        </span>
+                      )}
+                    </button>
+                    <button 
+                      onClick={() => { setVersionSearchQuery(''); setVersionFilters({ creators: [], dateRange: { start: '', end: '' } }); setTempVersionFilters({ creators: [], dateRange: { start: '', end: '' } }); }}
+                      className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent" 
+                      title="Làm mới"
+                    >
+                      <RefreshCw size={20} />
+                    </button>
+                    <button 
+                      onClick={() => handleDownload(selectedSource.schemaVersions || [], `lich-su-thiet-lap-tieu-chi-${selectedSource.name}`)}
+                      className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent" 
+                      title="Tải về"
+                    >
+                      <Download size={20} />
+                    </button>
+                  </div>
+
+                  {/* Version Filter Dropdown */}
+                  <AnimatePresence>
+                    {isVersionFilterOpen && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute top-full right-4 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-4 space-y-4"
+                      >
+                        <div className="space-y-3">
+                          <MultiSelectFilter 
+                            label="Người cập nhật"
+                            options={[
+                              { label: 'Nguyễn Văn A', value: 'Nguyễn Văn A' },
+                              { label: 'Trần Thị B', value: 'Trần Thị B' },
+                              { label: 'Lê Văn C', value: 'Lê Văn C' }
+                            ]}
+                            selectedValues={tempVersionFilters.creators}
+                            onChange={(vals) => setTempVersionFilters({...tempVersionFilters, creators: vals})}
+                            placeholder="Tất cả"
+                          />
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Khoảng thời gian</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input 
+                                type="date" 
+                                className="w-full px-2 py-1.5 text-[10px] rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                value={tempVersionFilters.dateRange.start}
+                                onChange={(e) => setTempVersionFilters({...tempVersionFilters, dateRange: {...tempVersionFilters.dateRange, start: e.target.value}})}
+                              />
+                              <input 
+                                type="date" 
+                                className="w-full px-2 py-1.5 text-[10px] rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                value={tempVersionFilters.dateRange.end}
+                                onChange={(e) => setTempVersionFilters({...tempVersionFilters, dateRange: {...tempVersionFilters.dateRange, end: e.target.value}})}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                          <button 
+                            onClick={() => {
+                              const reset = { creators: [], dateRange: { start: '', end: '' } };
+                              setTempVersionFilters(reset);
+                              setVersionFilters(reset);
+                              setVersionCurrentPage(1);
+                            }}
+                            className="text-[10px] font-bold text-gray-400 hover:text-gray-600 px-3 py-1"
+                          >
+                            Xóa lọc
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setVersionFilters(tempVersionFilters);
+                              setIsVersionFilterOpen(false);
+                              setVersionCurrentPage(1);
+                            }}
+                            className="bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-lg"
+                          >
+                            Áp dụng
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto flex-1">
                   <table className="w-full text-left">
-                    <thead className="bg-gray-50/50 text-gray-500 text-[10px] uppercase font-bold">
+                    <thead className="bg-gray-50/50 text-gray-500 text-[10px] uppercase font-bold sticky top-0 bg-white z-10">
                       <tr>
                         <th className="px-6 py-3">Tên phiên bản</th>
                         <th className="px-6 py-3">Thời gian cập nhật</th>
@@ -5537,7 +5698,18 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {selectedSource.schemaVersions?.map((v) => (
+                      {selectedSource.schemaVersions
+                        ?.filter(v => v.versionName?.toLowerCase().includes(versionSearchQuery.toLowerCase()) || `v${v.version}`.includes(versionSearchQuery.toLowerCase()))
+                        .filter(v => versionFilters.creators.length === 0 || versionFilters.creators.includes(v.createdBy))
+                        .filter(v => {
+                          if (!versionFilters.dateRange.start && !versionFilters.dateRange.end) return true;
+                          const vTime = new Date(v.createdAt).getTime();
+                          const start = versionFilters.dateRange.start ? new Date(versionFilters.dateRange.start).getTime() : 0;
+                          const end = versionFilters.dateRange.end ? new Date(versionFilters.dateRange.end).getTime() + 86399999 : Infinity;
+                          return vTime >= start && vTime <= end;
+                        })
+                        .slice((versionCurrentPage - 1) * 10, versionCurrentPage * 10)
+                        .map((v) => (
                         <tr 
                           key={v.id} 
                           className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
@@ -5561,6 +5733,29 @@ export default function App() {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Pagination for versions */}
+                <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/30 shrink-0">
+                  <p className="text-xs text-gray-500">
+                    Hiển thị <span className="font-medium">{(versionCurrentPage - 1) * 10 + 1}</span> đến <span className="font-medium">{Math.min(versionCurrentPage * 10, selectedSource.schemaVersions?.length || 0)}</span> trong <span className="font-medium">{selectedSource.schemaVersions?.length || 0}</span> kết quả
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button 
+                      disabled={versionCurrentPage === 1}
+                      onClick={() => setVersionCurrentPage(versionCurrentPage - 1)}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors"
+                    >
+                      <ArrowLeft size={16} />
+                    </button>
+                    <button 
+                      disabled={versionCurrentPage * 10 >= (selectedSource.schemaVersions?.length || 0)}
+                      onClick={() => setVersionCurrentPage(versionCurrentPage + 1)}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
