@@ -1,0 +1,5 @@
+{
+  "name": "Remix: DataHub Manager",
+  "description": "Hệ thống quản lý tích hợp dữ liệu tập trung từ các nguồn CSDL.",
+  "requestFramePermissions": []
+}
