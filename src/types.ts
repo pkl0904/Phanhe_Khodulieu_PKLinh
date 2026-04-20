@@ -70,6 +70,9 @@ export interface SchemaVersion {
 export interface SourceDatabase {
   id: string;
   name: string;
+  code: string;
+  dataType: 'category' | 'specialized';
+  categoryType?: string;
   ministry: string;
   unit: string;
   creator: string;

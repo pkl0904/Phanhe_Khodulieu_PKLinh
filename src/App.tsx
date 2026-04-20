@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Database, 
@@ -47,7 +47,9 @@ import {
   Users,
   CheckSquare,
   BarChart3,
-  Menu
+  Menu,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -72,6 +74,8 @@ const MOCK_SOURCES: SourceDatabase[] = [
   {
     id: '1',
     name: 'Thông tin về Mã số, mã vạch quốc gia',
+    code: 'MSMV-001',
+    dataType: 'specialized',
     ministry: 'Bộ Khoa học và Công nghệ',
     unit: 'Cục Sở hữu trí tuệ',
     creator: 'Nguyễn Văn A',
@@ -118,6 +122,8 @@ const MOCK_SOURCES: SourceDatabase[] = [
   {
     id: '2',
     name: 'Thông tin về Quy chuẩn kỹ thuật',
+    code: 'QCKT-002',
+    dataType: 'specialized',
     ministry: 'Bộ Khoa học và Công nghệ',
     unit: 'Cục Sở hữu trí tuệ',
     creator: 'Trần Thị B',
@@ -148,6 +154,8 @@ const MOCK_SOURCES: SourceDatabase[] = [
   {
     id: '3',
     name: 'Thông tin về Tiêu chuẩn quốc gia',
+    code: 'TCQG-003',
+    dataType: 'specialized',
     ministry: 'Bộ Khoa học và Công nghệ',
     unit: 'Cục Sở hữu trí tuệ',
     creator: 'Lê Văn C',
@@ -178,6 +186,8 @@ const MOCK_SOURCES: SourceDatabase[] = [
   {
     id: '4',
     name: 'Thông tin chung về đơn xác lập quyền sở hữu trí tuệ',
+    code: 'SLQ-004',
+    dataType: 'specialized',
     ministry: 'Bộ Khoa học và Công nghệ',
     unit: 'Ủy ban Tiêu chuẩn Đo lường Chất lượng Quốc gia',
     creator: 'Phạm Thị D',
@@ -893,9 +903,23 @@ const Switch = ({ enabled, onChange }: { enabled: boolean, onChange: () => void 
   </button>
 );
 
+const CATEGORY_TYPES = ['Tôn giáo', 'Giới tính', 'Dân tộc', 'Quốc tịch', 'Học vị', 'Nghề nghiệp'];
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'overview' | 'sources' | 'reconciliation' | 'extraction' | 'reconciliation_summary'>('overview');
   const [view, setView] = useState<'list' | 'detail' | 'wizard'>('list');
+  const [serviceBasicInfo, setServiceBasicInfo] = useState({
+    name: '',
+    code: '',
+    dataType: 'specialized' as 'category' | 'specialized',
+    categoryType: '',
+    ministry: '',
+    unit: '',
+    api: '',
+    secret: ''
+  });
+  const [serviceWhitelist, setServiceWhitelist] = useState<string[]>([]);
+  const [newWhitelistIp, setNewWhitelistIp] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [openMenus, setOpenMenus] = useState<string[]>(['data_warehouse']);
 
@@ -907,14 +931,17 @@ export default function App() {
     );
   };
   const [selectedSource, setSelectedSource] = useState<SourceDatabase | null>(null);
+  const [eventLogs, setEventLogs] = useState<EventLog[]>(MOCK_EVENT_LOGS);
   const [wizardStep, setWizardStep] = useState(1);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionResult, setConnectionResult] = useState<'success' | 'error' | null>(null);
   const [isStatusConfirmOpen, setIsStatusConfirmOpen] = useState(false);
   const [isEditRestrictedOpen, setIsEditRestrictedOpen] = useState(false);
-  const [isSaveInfoConfirmOpen, setIsSaveInfoConfirmOpen] = useState(false);
   const [isNormalizationConfirmOpen, setIsNormalizationConfirmOpen] = useState(false);
   const [isReconciliationConfirmOpen, setIsReconciliationConfirmOpen] = useState(false);
+  const [isSaveBasicInfoConfirmOpen, setIsSaveBasicInfoConfirmOpen] = useState(false);
+  const [isSaveReconInfoConfirmOpen, setIsSaveReconInfoConfirmOpen] = useState(false);
+  const [isSaveWhitelistConfirmOpen, setIsSaveWhitelistConfirmOpen] = useState(false);
   const [dashboardTimeRange, setDashboardTimeRange] = useState<'today' | 'week' | 'month' | 'custom'>('today');
   const [dashboardCustomRange, setDashboardCustomRange] = useState({ start: '', end: '' });
   const [notification, setNotification] = useState<{ message: string; visible: boolean } | null>(null);
@@ -990,6 +1017,7 @@ export default function App() {
   const [tempLogFilters, setTempLogFilters] = useState(logFilters);
   const [activeReconMenu, setActiveReconMenu] = useState<string | null>(null);
   const [activeDetailReconMenu, setActiveDetailReconMenu] = useState<string | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
 
   const RECON_MASTER_OPTIONS = {
     quantity: [
@@ -1076,14 +1104,30 @@ export default function App() {
 
   const [newSource, setNewSource] = useState({
     name: '',
+    code: '',
+    dataType: 'specialized' as 'category' | 'specialized',
+    categoryType: '',
     ministry: '',
     unit: '',
     api: '',
     secret: '',
-    token: '',
     whitelist: [] as string[],
     tags: [] as string[]
   });
+
+  useEffect(() => {
+    if (newSource.api && !newSource.secret) {
+      setNewSource(prev => ({
+        ...prev,
+        secret: 'AK-' + Math.random().toString(36).substring(2, 12).toUpperCase()
+      }));
+    } else if (!newSource.api && newSource.secret) {
+      setNewSource(prev => ({
+        ...prev,
+        secret: ''
+      }));
+    }
+  }, [newSource.api, newSource.secret]);
 
   const [sampleType, setSampleType] = useState<'XML' | 'CSV'>('XML');
   const [sampleContent, setSampleContent] = useState('');
@@ -1544,6 +1588,7 @@ export default function App() {
     setExtractionCurrentPage(1);
     setActiveTab('extraction');
     setView('list');
+    window.scrollTo(0, 0);
   };
 
   const activeLogFiltersCount = Object.entries(logFilters).reduce((acc, [key, value]) => {
@@ -2454,6 +2499,9 @@ export default function App() {
                   </th>
                   <th className="px-6 py-4 font-semibold">Bộ</th>
                   <th className="px-6 py-4 font-semibold">Đơn vị</th>
+                  <th className="px-6 py-4 font-semibold">Tổng bản ghi</th>
+                  <th className="px-6 py-4 font-semibold text-center text-green-600">Thành công</th>
+                  <th className="px-6 py-4 font-semibold text-center text-red-600">Thất bại</th>
                   <th 
                     className={cn(
                       "px-6 py-4 font-semibold cursor-pointer hover:text-blue-600 transition-colors",
@@ -2494,6 +2542,59 @@ export default function App() {
                       <td className="px-6 py-4 text-xs text-gray-600">{item.sourceName}</td>
                       <td className="px-6 py-4 text-xs text-gray-600">{item.ministry || '—'}</td>
                       <td className="px-6 py-4 text-xs text-gray-600">{item.unit || '—'}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-gray-900">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const date = item.startTime ? item.startTime.split(' ')[0].split('-').reverse().join('-') : '';
+                            navigateToExtraction({
+                              ministry: item.ministry,
+                              unit: item.unit,
+                              source: item.sourceName,
+                              dateRange: date ? { start: date, end: date } : undefined
+                            });
+                          }}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {item.totalRecords || 0}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-xs font-bold text-green-600 text-center">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const date = item.startTime ? item.startTime.split(' ')[0].split('-').reverse().join('-') : '';
+                            navigateToExtraction({
+                              ministry: item.ministry,
+                              unit: item.unit,
+                              source: item.sourceName,
+                              status: 'success',
+                              dateRange: date ? { start: date, end: date } : undefined
+                            });
+                          }}
+                          className="hover:underline"
+                        >
+                          {item.validRecordsCount || 0}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-xs font-bold text-red-600 text-center">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const date = item.startTime ? item.startTime.split(' ')[0].split('-').reverse().join('-') : '';
+                            navigateToExtraction({
+                              ministry: item.ministry,
+                              unit: item.unit,
+                              source: item.sourceName,
+                              status: 'error',
+                              dateRange: date ? { start: date, end: date } : undefined
+                            });
+                          }}
+                          className="hover:underline"
+                        >
+                          {item.formatErrors || 0}
+                        </button>
+                      </td>
                       <td className="px-6 py-4 text-xs text-gray-600">{item.processingTime || '—'}</td>
                       <td className="px-6 py-4 text-center">
                         <span 
@@ -2576,7 +2677,7 @@ export default function App() {
       { id: 4, title: 'Bảo mật nâng cao' }
     ];
 
-    const isStep1Valid = newSource.name && newSource.ministry && newSource.unit && newSource.api && newSource.secret && newSource.token;
+    const isStep1Valid = newSource.name && newSource.code && newSource.dataType && (newSource.dataType === 'category' ? newSource.categoryType : true) && newSource.ministry && newSource.unit && newSource.api && newSource.secret;
     const isStep2Valid = detectedSchema.length > 0;
     const isStep3Valid = reconCategories.some(cat => cat.options.some(opt => opt.enabled));
 
@@ -2637,6 +2738,60 @@ export default function App() {
                     />
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Mã dịch vụ <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="VD: DV-HOTICH-001" 
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                      value={newSource.code || ''}
+                      onChange={(e) => setNewSource({...newSource, code: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Loại dữ liệu <span className="text-red-500">*</span>
+                    </label>
+                    <select 
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                      value={newSource.dataType}
+                      onChange={(e) => setNewSource({...newSource, dataType: e.target.value as any, categoryType: ''})}
+                      required
+                    >
+                      <option value="specialized">Dữ liệu chuyên ngành</option>
+                      <option value="category">Danh mục</option>
+                    </select>
+                  </div>
+                  <AnimatePresence>
+                    {newSource.dataType === 'category' && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="pb-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Loại danh mục <span className="text-red-500">*</span>
+                          </label>
+                          <select 
+                            className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                            value={newSource.categoryType}
+                            onChange={(e) => setNewSource({...newSource, categoryType: e.target.value})}
+                            required
+                          >
+                            <option value="">Chọn loại danh mục...</option>
+                            {CATEGORY_TYPES.map(type => (
+                              <option key={type} value={type}>{type}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Bộ chủ quản <span className="text-red-500">*</span></label>
                     <select 
                       className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
@@ -2667,7 +2822,7 @@ export default function App() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      API <span className="text-red-500">*</span>
+                      API Endpoint <span className="text-red-500">*</span>
                     </label>
                     <input 
                       type="text" 
@@ -2680,29 +2835,25 @@ export default function App() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Secret Key <span className="text-red-500">*</span>
+                      API key <span className="text-red-500">*</span>
                     </label>
-                    <input 
-                      type="password" 
-                      placeholder="••••••••••••••••" 
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
-                      value={newSource.secret}
-                      onChange={(e) => setNewSource({...newSource, secret: e.target.value})}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Secret Token <span className="text-red-500">*</span>
-                    </label>
-                    <input 
-                      type="password" 
-                      placeholder="••••••••••••••••" 
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
-                      value={newSource.token}
-                      onChange={(e) => setNewSource({...newSource, token: e.target.value})}
-                      required
-                    />
+                    <div className="relative">
+                      <input 
+                        type={showApiKey ? "text" : "password"}
+                        placeholder="Hệ thống tự động điền" 
+                        className="w-full px-4 py-2 pr-10 rounded-lg border border-gray-100 bg-gray-50 text-gray-500 outline-none cursor-not-allowed"
+                        value={newSource.secret}
+                        readOnly
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+                      >
+                        {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -4848,48 +4999,51 @@ export default function App() {
     </AnimatePresence>
   );
 
-  const renderSaveInfoConfirmModal = () => (
+  useEffect(() => {
+    if (selectedSource) {
+      setServiceBasicInfo({
+        name: selectedSource.name,
+        code: selectedSource.code,
+        dataType: selectedSource.dataType,
+        categoryType: selectedSource.categoryType || '',
+        ministry: selectedSource.ministry,
+        unit: selectedSource.unit,
+        api: selectedSource.api || '',
+        secret: 'AK-' + Math.random().toString(36).substring(2, 12).toUpperCase()
+      });
+      setServiceWhitelist(selectedSource.whitelist || []);
+    }
+  }, [selectedSource]);
+
+  const renderSaveConfirmModal = (isOpen: boolean, setIsOpen: (o: boolean) => void, onConfirm: () => void, title: string, description: string) => (
     <AnimatePresence>
-      {isSaveInfoConfirmOpen && (
+      {isOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsSaveInfoConfirmOpen(false)}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setIsOpen(false)}
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
           />
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="relative w-full max-w-md bg-white rounded-[32px] shadow-2xl overflow-hidden"
           >
-            <div className="p-8 text-center">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="p-8 text-center border-b border-gray-50 flex flex-col items-center">
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6">
                 <Save size={32} />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Xác nhận lưu thay đổi</h3>
-              <p className="text-gray-500">Bạn có chắc chắn muốn lưu các thay đổi thông tin dịch vụ này không?</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{title}</h3>
+              <p className="text-gray-500 text-sm px-4">{description}</p>
             </div>
-            
             <div className="p-6 bg-gray-50 flex gap-3">
               <button 
-                onClick={() => setIsSaveInfoConfirmOpen(false)}
-                className="flex-1 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-all"
-              >
-                Hủy
-              </button>
+                onClick={() => setIsOpen(false)} 
+                className="flex-1 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-all border border-gray-200 bg-white"
+              >Hủy</button>
               <button 
-                onClick={() => {
-                  setIsSaveInfoConfirmOpen(false);
-                  setDetailTab('overview');
-                  showNotification('Đã cập nhật thông tin dịch vụ thành công.');
-                }}
+                onClick={() => { setIsOpen(false); onConfirm(); }} 
                 className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
-              >
-                Xác nhận lưu
-              </button>
+              >Xác nhận lưu</button>
             </div>
           </motion.div>
         </div>
@@ -5158,6 +5312,55 @@ export default function App() {
           </div>
         </div>
         {renderStatusConfirmModal()}
+      {renderSaveConfirmModal(isSaveBasicInfoConfirmOpen, setIsSaveBasicInfoConfirmOpen, () => {
+        if (selectedSource) {
+          setSelectedSource({ ...selectedSource, ...serviceBasicInfo });
+          const newLog: EventLog = {
+            id: `l${Date.now()}`,
+            name: 'Sửa cấu hình thông tin dịch vụ trích rút dữ liệu',
+            status: 'success',
+            startTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
+            modifiedBy: 'Nguyễn Văn A',
+            changeDescription: `Cập nhật thông tin cơ bản & xác thực cho dịch vụ "${serviceBasicInfo.name}".`
+          };
+          setEventLogs(prev => [newLog, ...prev]);
+          showNotification('Đã cập nhật thông tin cơ bản & xác thực thành công.');
+          setDetailTab('overview');
+        }
+      }, 'Xác nhận lưu thông tin cơ bản', 'Bạn có chắc chắn muốn lưu các thay đổi đối với thông tin cơ bản và xác thực không?')}
+      
+      {renderSaveConfirmModal(isSaveReconInfoConfirmOpen, setIsSaveReconInfoConfirmOpen, () => {
+        if (selectedSource) {
+          const newLog: EventLog = {
+            id: `l${Date.now()}`,
+            name: 'Sửa cấu hình dịch vụ đối soát',
+            status: 'success',
+            startTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
+            modifiedBy: 'Nguyễn Văn A',
+            changeDescription: `Cập nhật tiêu chí đối soát dữ liệu cho dịch vụ "${selectedSource.name}".`
+          };
+          setEventLogs(prev => [newLog, ...prev]);
+          showNotification('Đã cập nhật dịch vụ đối soát thành công.');
+          setDetailTab('overview');
+        }
+      }, 'Xác nhận lưu cấu hình đối soát', 'Bạn có chắc chắn muốn lưu các thay đổi đối với cấu hình dịch vụ đối soát dữ liệu không?')}
+      
+      {renderSaveConfirmModal(isSaveWhitelistConfirmOpen, setIsSaveWhitelistConfirmOpen, () => {
+        if (selectedSource) {
+          setSelectedSource({ ...selectedSource, whitelist: serviceWhitelist });
+          const newLog: EventLog = {
+            id: `l${Date.now()}`,
+            name: 'Sửa cấu hình thông tin dịch vụ trích rút dữ liệu',
+            status: 'success',
+            startTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
+            modifiedBy: 'Nguyễn Văn A',
+            changeDescription: `Cập nhật danh sách Whitelist cho dịch vụ "${selectedSource.name}".`
+          };
+          setEventLogs(prev => [newLog, ...prev]);
+          showNotification('Đã cập nhật danh sách whitelist thành công.');
+          setDetailTab('overview');
+        }
+      }, 'Xác nhận lưu Whitelist', 'Bạn có chắc chắn muốn lưu các thay đổi đối với danh sách Whitelist không?')}
 
         <div className="flex border-b border-gray-200">
           {[
@@ -5351,7 +5554,7 @@ export default function App() {
                       <RefreshCw size={20} />
                     </button>
                     <button 
-                      onClick={() => handleDownload(MOCK_EVENT_LOGS, `nhat-ky-${selectedSource.name}`)}
+                      onClick={() => handleDownload(eventLogs, `nhat-ky-${selectedSource.name}`)}
                       className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent" 
                       title="Tải về"
                     >
@@ -5500,7 +5703,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {MOCK_EVENT_LOGS
+                      {eventLogs
                         .filter(l => l.name.toLowerCase().includes(logSearchQuery.toLowerCase()))
                         .filter(l => logFilters.statuses.length === 0 || logFilters.statuses.includes(l.status))
                         .filter(l => logFilters.creators.length === 0 || logFilters.creators.includes(l.modifiedBy))
@@ -5546,7 +5749,7 @@ export default function App() {
                 {/* Pagination for logs */}
                 <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/30 shrink-0">
                   <p className="text-xs text-gray-500">
-                    Hiển thị <span className="font-medium">{(logCurrentPage - 1) * 10 + 1}</span> đến <span className="font-medium">{Math.min(logCurrentPage * 10, MOCK_EVENT_LOGS.length)}</span> trong <span className="font-medium">{MOCK_EVENT_LOGS.length}</span> kết quả
+                    Hiển thị <span className="font-medium">{(logCurrentPage - 1) * 10 + 1}</span> đến <span className="font-medium">{Math.min(logCurrentPage * 10, eventLogs.length)}</span> trong <span className="font-medium">{eventLogs.length}</span> kết quả
                   </p>
                   <div className="flex items-center gap-1">
                     <button 
@@ -5557,7 +5760,7 @@ export default function App() {
                       <ArrowLeft size={16} />
                     </button>
                     <button 
-                      disabled={logCurrentPage * 10 >= MOCK_EVENT_LOGS.length}
+                      disabled={logCurrentPage * 10 >= eventLogs.length}
                       onClick={() => setLogCurrentPage(logCurrentPage + 1)}
                       className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors"
                     >
@@ -5761,55 +5964,133 @@ export default function App() {
             )}
 
             {detailTab === 'edit' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-8">
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tên dịch vụ</label>
-                    <input 
-                      type="text" 
-                      defaultValue={selectedSource.name}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                    />
+              <div className="space-y-6">
+                {/* 1. Thông tin cơ bản & Xác thực */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+                  <div className="flex items-center gap-2 mb-2 pb-4 border-b border-gray-50">
+                    <h3 className="font-bold text-lg">Thông tin cơ bản & Xác thực</h3>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Bộ</label>
-                    <select 
-                      defaultValue={selectedSource.ministry}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                    >
-                      {Object.keys(MINISTRY_UNIT_MAPPING).map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Tên dịch vụ trích rút dữ liệu</label>
+                        <input 
+                          type="text" 
+                          value={serviceBasicInfo.name}
+                          onChange={(e) => setServiceBasicInfo({...serviceBasicInfo, name: e.target.value})}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Mã dịch vụ</label>
+                        <input 
+                          type="text" 
+                          value={serviceBasicInfo.code}
+                          onChange={(e) => setServiceBasicInfo({...serviceBasicInfo, code: e.target.value})}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Loại dữ liệu</label>
+                        <select 
+                          value={serviceBasicInfo.dataType}
+                          onChange={(e) => setServiceBasicInfo({...serviceBasicInfo, dataType: e.target.value as any, categoryType: ''})}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        >
+                          <option value="specialized">Dữ liệu chuyên ngành</option>
+                          <option value="category">Danh mục</option>
+                        </select>
+                      </div>
+                      <AnimatePresence>
+                        {serviceBasicInfo.dataType === 'category' && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="pt-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Loại danh mục</label>
+                              <select 
+                                value={serviceBasicInfo.categoryType}
+                                onChange={(e) => setServiceBasicInfo({...serviceBasicInfo, categoryType: e.target.value})}
+                                className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                              >
+                                <option value="">Chọn loại danh mục...</option>
+                                {CATEGORY_TYPES.map(type => (
+                                  <option key={type} value={type}>{type}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Bộ chủ quản</label>
+                        <select 
+                          value={serviceBasicInfo.ministry}
+                          onChange={(e) => setServiceBasicInfo({...serviceBasicInfo, ministry: e.target.value})}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        >
+                          {Object.keys(MINISTRY_UNIT_MAPPING).map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Đơn vị tích hợp</label>
+                        <select 
+                          value={serviceBasicInfo.unit}
+                          onChange={(e) => setServiceBasicInfo({...serviceBasicInfo, unit: e.target.value})}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        >
+                          {Object.values(MINISTRY_UNIT_MAPPING).flat().map(u => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">API Endpoint</label>
+                        <input 
+                          type="text" 
+                          readOnly
+                          value={serviceBasicInfo.api}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">API key</label>
+                        <div className="relative">
+                          <input 
+                            type={showApiKey ? "text" : "password"}
+                            readOnly
+                            value={serviceBasicInfo.secret}
+                            className="w-full px-4 py-2 pr-10 rounded-lg border border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                          >
+                            {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Đơn vị</label>
-                    <select 
-                      defaultValue={selectedSource.unit}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                    >
-                      {Object.values(MINISTRY_UNIT_MAPPING).flat().map(u => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">API</label>
-                    <input 
-                      type="text" 
-                      defaultValue={selectedSource.api}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                    />
+                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-50">
+                    <button onClick={() => setDetailTab('overview')} className="px-6 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">Hủy bỏ</button>
+                    <button onClick={() => setIsSaveBasicInfoConfirmOpen(true)} className="px-8 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">Lưu thay đổi</button>
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-gray-100">
-                  <div className="flex items-center gap-4 mb-4">
-                    <h3 className="font-bold">Dịch vụ đối soát dữ liệu</h3>
-                    <Switch 
-                      enabled={!!selectedSource.isReconciliationEnabled} 
-                      onChange={() => setIsReconciliationConfirmOpen(true)} 
-                    />
+                {/* 2. Dịch vụ đối soát dữ liệu */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+                  <div className="flex items-center gap-4 border-b border-gray-50 pb-4">
+                    <h3 className="font-bold text-lg">Dịch vụ đối soát dữ liệu</h3>
+                    <Switch enabled={!!selectedSource.isReconciliationEnabled} onChange={() => setIsReconciliationConfirmOpen(true)} />
                   </div>
                   <div className={cn("space-y-8 transition-opacity", !selectedSource.isReconciliationEnabled && "opacity-50 pointer-events-none")}>
                     {detailReconCategories.map((category) => (
@@ -5820,111 +6101,88 @@ export default function App() {
                               onClick={() => setActiveDetailReconMenu(activeDetailReconMenu === category.id ? null : category.id)}
                               className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
                             >
-                              <Plus size={14} />
-                              Thêm tiêu chí
+                              <Plus size={14} /> Thêm tiêu chí
                             </button>
-                            
                             <AnimatePresence>
                               {activeDetailReconMenu === category.id && (
                                 <>
                                   <div className="fixed inset-0 z-10" onClick={() => setActiveDetailReconMenu(null)} />
-                                  <motion.div 
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: 10 }}
-                                    className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-2"
-                                  >
-                                    {RECON_MASTER_OPTIONS[category.id as keyof typeof RECON_MASTER_OPTIONS]
-                                      .filter(opt => !category.options.find(o => o.id === opt.id))
-                                      .map(opt => (
-                                        <button
-                                          key={opt.id}
-                                          onClick={() => addDetailReconOption(category.id, opt)}
-                                          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-                                        >
-                                          {opt.label}
-                                        </button>
-                                      ))}
-                                    {RECON_MASTER_OPTIONS[category.id as keyof typeof RECON_MASTER_OPTIONS]
-                                      .filter(opt => !category.options.find(o => o.id === opt.id)).length === 0 && (
-                                        <div className="px-4 py-2 text-xs text-gray-400 italic">Tất cả tiêu chí đã được thêm</div>
-                                      )}
+                                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 z-20 py-2">
+                                    {RECON_MASTER_OPTIONS[category.id as keyof typeof RECON_MASTER_OPTIONS].filter(opt => !category.options.find(o => o.id === opt.id)).map(opt => (
+                                      <button key={opt.id} onClick={() => addDetailReconOption(category.id, opt)} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors">{opt.label}</button>
+                                    ))}
+                                    {RECON_MASTER_OPTIONS[category.id as keyof typeof RECON_MASTER_OPTIONS].filter(opt => !category.options.find(o => o.id === opt.id)).length === 0 && (
+                                      <div className="px-4 py-2 text-xs text-gray-400 italic">Tất cả tiêu chí đã được thêm</div>
+                                    )}
                                   </motion.div>
                                 </>
                               )}
                             </AnimatePresence>
                           </div>
                         </div>
-
                         <div className="grid grid-cols-1 gap-3">
                           {category.options.map((option) => (
                             <div key={option.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100 group hover:border-blue-200 transition-all">
-                              <div 
-                                onClick={() => updateDetailReconOption(category.id, option.id, { enabled: !option.enabled })}
-                                className={cn(
-                                  "w-5 h-5 rounded border flex items-center justify-center transition-all cursor-pointer shrink-0",
-                                  option.enabled ? "bg-blue-600 border-blue-600 text-white" : "border-gray-300 bg-white"
-                                )}
-                              >
+                              <div onClick={() => updateDetailReconOption(category.id, option.id, { enabled: !option.enabled })} className={cn("w-5 h-5 rounded border flex items-center justify-center transition-all cursor-pointer shrink-0 text-white", option.enabled ? "bg-blue-600 border-blue-600" : "border-gray-300 bg-white")}>
                                 {option.enabled && <Check size={12} strokeWidth={4} />}
                               </div>
-                              <div className="flex-1">
-                                <span className="text-sm font-medium text-gray-900">{option.label}</span>
-                              </div>
-                              <button 
-                                onClick={() => removeDetailReconOption(category.id, option.id)}
-                                className="p-2 text-gray-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                                title="Xóa"
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                              <div className="flex-1"><span className="text-sm font-medium text-gray-900">{option.label}</span></div>
+                              <button onClick={() => removeDetailReconOption(category.id, option.id)} className="p-2 text-gray-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" title="Xóa"><Trash2 size={16} /></button>
                             </div>
                           ))}
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-
-                <div className="pt-6 border-t border-gray-100">
-                  <h3 className="font-bold mb-4">Danh sách Whitelist</h3>
-                  <div className="space-y-2">
-                    {selectedSource.whitelist?.map((ip, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group">
-                        <span className="text-sm font-mono">{ip}</span>
-                        <button className="text-gray-400 hover:text-red-600 transition-all">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                    <div className="flex gap-2 mt-2">
-                      <input type="text" placeholder="Thêm URL/API..." className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg" />
-                      <button className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold">Thêm</button>
-                    </div>
+                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-50">
+                    <button onClick={() => setDetailTab('overview')} className="px-6 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">Hủy bỏ</button>
+                    <button 
+                      disabled={!detailReconCategories.some(cat => cat.options.some(opt => opt.enabled))}
+                      onClick={() => setIsSaveReconInfoConfirmOpen(true)}
+                      className={cn("px-8 py-2 rounded-xl font-bold transition-all shadow-lg shadow-blue-200", !detailReconCategories.some(cat => cat.options.some(opt => opt.enabled)) ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none" : "bg-blue-600 text-white hover:bg-blue-700")}
+                    >Lưu thay đổi</button>
                   </div>
                 </div>
 
-
-                
-                <div className="flex justify-end gap-3 pt-4">
-                  <button 
-                    onClick={() => setDetailTab('overview')}
-                    className="px-6 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors"
-                  >
-                    Huỷ bỏ
-                  </button>
-                  <button 
-                    disabled={!detailReconCategories.some(cat => cat.options.some(opt => opt.enabled))}
-                    onClick={() => setIsSaveInfoConfirmOpen(true)}
-                    className={cn(
-                      "px-8 py-2.5 rounded-xl font-bold transition-all shadow-lg",
-                      !detailReconCategories.some(cat => cat.options.some(opt => opt.enabled))
-                        ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
-                        : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200"
-                    )}
-                  >
-                    Lưu thay đổi
-                  </button>
+                {/* 3. Danh sách Whitelist */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+                  <div className="flex items-center gap-4 border-b border-gray-50 pb-4">
+                    <h3 className="font-bold text-lg">Danh sách Whitelist</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      {serviceWhitelist.map((ip, i) => (
+                        <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group border border-gray-100">
+                          <span className="text-sm font-mono text-gray-600">{ip}</span>
+                          <button onClick={() => setServiceWhitelist(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-gray-400 hover:text-red-600 transition-all opacity-0 group-hover:opacity-100">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 max-w-md">
+                      <input 
+                        type="text" 
+                        placeholder="Thêm URL/API..." 
+                        value={newWhitelistIp}
+                        onChange={(e) => setNewWhitelistIp(e.target.value)}
+                        className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none" 
+                      />
+                      <button 
+                        onClick={() => {
+                          if (newWhitelistIp.trim()) {
+                            setServiceWhitelist(prev => [...prev, newWhitelistIp.trim()]);
+                            setNewWhitelistIp('');
+                          }
+                        }}
+                        className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
+                      >Thêm</button>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-50">
+                    <button onClick={() => setDetailTab('overview')} className="px-6 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">Hủy bỏ</button>
+                    <button onClick={() => setIsSaveWhitelistConfirmOpen(true)} className="px-8 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">Lưu thay đổi</button>
+                  </div>
                 </div>
               </div>
             )}
@@ -6293,7 +6551,6 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
-      {renderSaveInfoConfirmModal()}
       {renderNormalizationConfirmModal()}
       {renderReconciliationConfirmModal()}
       {renderNotification()}
