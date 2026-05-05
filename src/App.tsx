@@ -39,6 +39,9 @@ import {
   Edit2,
   Save,
   Power,
+  Copy,
+  Eye,
+  EyeOff,
   CornerDownRight,
   Building,
   Globe,
@@ -48,8 +51,7 @@ import {
   CheckSquare,
   BarChart3,
   Menu,
-  Eye,
-  EyeOff
+  HardDrive
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -67,7 +69,16 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { SourceDatabase, ConnectionStatus, SyncItem, UserPermission, EventLog, ReconciliationRecord, ReconciliationStatus, ExtractionRecord, ExtractionStatus } from './types';
+import { SourceDatabase, ConnectionStatus, SyncItem, UserPermission, EventLog, ReconciliationRecord, ReconciliationStatus, ExtractionRecord, ExtractionStatus, SchemaVersion, SchemaField } from './types';
+
+// --- Helpers ---
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
 
 // --- Mock Data ---
 const MOCK_SOURCES: SourceDatabase[] = [
@@ -83,7 +94,10 @@ const MOCK_SOURCES: SourceDatabase[] = [
     lastUpdated: '2024-03-12 14:30',
     type: 'REST API',
     api: 'https://api.most.gov.vn/v1/barcode',
+    apiPublic: 'PUB-MSMV-001',
+    apiKey: 'AK-B4X1G7H9JK',
     tableCount: 4,
+    tags: ['Mã số mã vạch', 'Thiết bị đo', 'ATBX'],
     whitelist: ['192.168.1.1', 'api.gov.vn'],
     permissions: [
       { id: 'u1', name: 'Nguyễn Văn A', email: 'a@gov.vn', role: 'editor', avatar: 'https://i.pravatar.cc/150?u=a' },
@@ -115,9 +129,17 @@ const MOCK_SOURCES: SourceDatabase[] = [
       { id: 'v1', version: '1.2.4', versionName: 'Phiên bản bổ sung thông tin tiếp nhận', createdAt: '2024-03-12 14:30', createdBy: 'Nguyễn Văn A', description: 'Cập nhật thêm trường DuLieuTiepNhan và các trường con IdBangGhi, SoDinhDanh để phục vụ việc trích rút dữ liệu định danh.', tableCount: 154 },
       { id: 'v2', version: '1.2.3', versionName: 'Cập nhật ràng buộc dữ liệu', createdAt: '2024-02-28 10:15', createdBy: 'Trần Thị B', description: 'Bổ sung các điều kiện ràng buộc (Conditions) cho trường PhienBan và NgayHieuLuc nhằm đảm bảo tính toàn vẹn dữ liệu.', tableCount: 153 },
     ],
-    tags: ['Mã số mã vạch', 'Quan trọng'],
     isNormalizationEnabled: true,
-    isReconciliationEnabled: true
+    isReconciliationEnabled: true,
+    normalizationDraft: {
+      updatedAt: '2024-03-13 10:00',
+      updatedBy: 'Nguyễn Văn A',
+      applyDate: '2024-04-01',
+      description: 'Cập nhật tiêu chí kỹ thuật cho quý 2/2024',
+      schema: [
+        { id: 'd1', name: 'DraftField', isGreenFlow: false, isRequired: true, dataType: 'Chữ (String)', conditions: [], isEditing: false }
+      ]
+    }
   },
   {
     id: '2',
@@ -131,6 +153,8 @@ const MOCK_SOURCES: SourceDatabase[] = [
     lastUpdated: '2024-03-11 09:15',
     type: 'REST API',
     api: 'https://api.most.gov.vn/v2/standards',
+    apiPublic: 'PUB-QCKT-002',
+    apiKey: 'AK-L9M2N5P8RQ',
     tableCount: 89,
     whitelist: ['10.0.0.5'],
     permissions: [
@@ -362,6 +386,7 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     recordId: 'DN-00412', 
     status: 'data_error',
     processingTime: '72ms',
+    size: 24576, // 24KB
     startTime: '16-01-2026 19:06:00',
     endTime: '16-01-2026 19:06:00',
     waitTime: '0ms',
@@ -389,6 +414,7 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     recordId: 'BH-19823', 
     status: 'connection_error',
     processingTime: '0ms',
+    size: 0,
     startTime: '16-01-2026 18:30:12',
     endTime: '16-01-2026 18:30:12',
     waitTime: '5000ms',
@@ -415,6 +441,7 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     recordId: 'TX-88203', 
     status: 'success',
     processingTime: '224ms',
+    size: 15360, // 15KB
     startTime: '16-01-2026 18:26:34',
     endTime: '16-01-2026 18:26:34',
     waitTime: '0ms',
@@ -435,6 +462,7 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     recordId: 'DN-00411', 
     status: 'data_error',
     processingTime: '45ms',
+    size: 32768, // 32KB
     startTime: '16-01-2026 18:20:10',
     endTime: '16-01-2026 18:20:10',
     waitTime: '0ms',
@@ -462,6 +490,7 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     recordId: 'TX-88202', 
     status: 'success',
     processingTime: '180ms',
+    size: 18432, // 18KB
     startTime: '16-01-2026 18:15:00',
     endTime: '16-01-2026 18:15:00',
     waitTime: '0ms',
@@ -489,7 +518,8 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     validRecordsCount: 1,
     validRate: '100%',
     formatErrors: 0,
-    duplicates: 0
+    duplicates: 0,
+    size: 16384 // 16KB
   },
   { 
     id: 'r7', 
@@ -508,7 +538,8 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     validRecordsCount: 1,
     validRate: '100%',
     formatErrors: 0,
-    duplicates: 0
+    duplicates: 0,
+    size: 20480 // 20KB
   },
   { 
     id: 'r8', 
@@ -527,7 +558,8 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     validRecordsCount: 1,
     validRate: '100%',
     formatErrors: 0,
-    duplicates: 0
+    duplicates: 0,
+    size: 28672 // 28KB
   },
   { 
     id: 'r9', 
@@ -575,7 +607,8 @@ const MOCK_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
     validRecordsCount: 1,
     validRate: '100%',
     formatErrors: 0,
-    duplicates: 0
+    duplicates: 0,
+    size: 12288 // 12KB
   }
 ];
 
@@ -597,6 +630,7 @@ const MOCK_EXTRACTION_RECORDS: ExtractionRecord[] = [
     startTime: '16-01-2026 19:06:00',
     endTime: '16-01-2026 19:06:01',
     processingTime: '120ms',
+    size: 1048576, // 1MB
     payload: '{"barcode": "8931234567890"}',
     response: '{"status": "valid", "product": "Sữa tươi tiệt trùng"}'
   },
@@ -611,6 +645,7 @@ const MOCK_EXTRACTION_RECORDS: ExtractionRecord[] = [
     startTime: '16-01-2026 18:30:12',
     endTime: '16-01-2026 18:30:15',
     processingTime: '3000ms',
+    size: 524288, // 512KB
     errorMessage: 'Connection timeout at 192.168.1.1'
   },
   {
@@ -623,7 +658,8 @@ const MOCK_EXTRACTION_RECORDS: ExtractionRecord[] = [
     status: 'success',
     startTime: '16-01-2026 18:26:34',
     endTime: '16-01-2026 18:26:35',
-    processingTime: '450ms'
+    processingTime: '450ms',
+    size: 262144 // 256KB
   }
 ];
 
@@ -916,7 +952,8 @@ export default function App() {
     ministry: '',
     unit: '',
     api: '',
-    secret: ''
+    apiPublic: '',
+    apiKey: ''
   });
   const [serviceWhitelist, setServiceWhitelist] = useState<string[]>([]);
   const [newWhitelistIp, setNewWhitelistIp] = useState('');
@@ -931,12 +968,20 @@ export default function App() {
     );
   };
   const [selectedSource, setSelectedSource] = useState<SourceDatabase | null>(null);
+  const [sources, setSources] = useState<SourceDatabase[]>(MOCK_SOURCES);
   const [eventLogs, setEventLogs] = useState<EventLog[]>(MOCK_EVENT_LOGS);
   const [wizardStep, setWizardStep] = useState(1);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionResult, setConnectionResult] = useState<'success' | 'error' | null>(null);
   const [isStatusConfirmOpen, setIsStatusConfirmOpen] = useState(false);
   const [isEditRestrictedOpen, setIsEditRestrictedOpen] = useState(false);
+  const [isDraftSelectionModalOpen, setIsDraftSelectionModalOpen] = useState(false);
+  const [isNormalizationDraftModalOpen, setIsNormalizationDraftModalOpen] = useState(false);
+  const [isStartingNewSchema, setIsStartingNewSchema] = useState(false);
+  const [normalizationDraftInfo, setNormalizationDraftInfo] = useState({ applyDate: '', description: '' });
+  const [deactivationDescription, setDeactivationDescription] = useState('');
+  const [isDraftDetailModalOpen, setIsDraftDetailModalOpen] = useState(false);
+  const [viewingDraft, setViewingDraft] = useState<any>(null);
   const [isNormalizationConfirmOpen, setIsNormalizationConfirmOpen] = useState(false);
   const [isReconciliationConfirmOpen, setIsReconciliationConfirmOpen] = useState(false);
   const [isSaveBasicInfoConfirmOpen, setIsSaveBasicInfoConfirmOpen] = useState(false);
@@ -953,28 +998,95 @@ export default function App() {
     }, 3000);
   };
 
-  const toggleSourceStatus = () => {
+  const toggleSourceStatus = (description?: string) => {
     if (!selectedSource) return;
-    const newStatus = selectedSource.status === 'connected' ? 'disconnected' : 'connected';
-    setSelectedSource({ ...selectedSource, status: newStatus });
+    const isActivating = selectedSource.status !== 'connected';
+    const newStatus = isActivating ? 'connected' : 'disconnected';
+    
+    const updatedSource = { 
+      ...selectedSource, 
+      status: newStatus,
+      // Khi kích hoạt dịch vụ trích rút thì đồng thời kích hoạt dịch vụ kiểm tra chuẩn hóa
+      isNormalizationEnabled: isActivating ? true : selectedSource.isNormalizationEnabled
+    };
+    
+    setSelectedSource(updatedSource);
+    setSources(prev => prev.map(s => s.id === selectedSource.id ? updatedSource : s));
+
+    if (description) {
+      const newLog: EventLog = {
+        id: `l${Date.now()}`,
+        name: isActivating ? 'Kích hoạt dịch vụ trích rút dữ liệu' : 'Vô hiệu hóa dịch vụ trích rút dữ liệu',
+        status: 'success',
+        startTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        modifiedBy: 'Nguyễn Văn A',
+        changeDescription: description
+      };
+      setEventLogs(prev => [newLog, ...prev]);
+    }
   };
 
-  const toggleNormalization = () => {
+  const toggleNormalization = (description?: string) => {
     if (!selectedSource) return;
-    setSelectedSource({ 
+    const isDeactivating = selectedSource.isNormalizationEnabled;
+    const nextEnabled = !selectedSource.isNormalizationEnabled;
+    
+    const resetSchema = (fields: SchemaField[]): SchemaField[] => {
+      return fields.map(field => ({
+        ...field,
+        isRequired: false,
+        isGreenFlow: false,
+        conditions: [],
+        children: field.children ? resetSchema(field.children) : undefined
+      }));
+    };
+
+    const updatedSource: SourceDatabase = { 
       ...selectedSource, 
-      isNormalizationEnabled: !selectedSource.isNormalizationEnabled 
-    });
-    showNotification(`Dịch vụ kiểm tra chuẩn hóa đã được ${!selectedSource.isNormalizationEnabled ? 'bật' : 'tắt'}.`);
+      isNormalizationEnabled: nextEnabled,
+      // Khi xóa dịch vụ kiểm tra chuẩn hóa cũng vô hiệu hóa dịch vụ trích rút luôn
+      status: (isDeactivating) ? 'disconnected' as const : selectedSource.status,
+      // Reset cấu hình if deactivating
+      schema: (isDeactivating && selectedSource.schema) ? resetSchema(selectedSource.schema) : selectedSource.schema
+    };
+
+    if (description) {
+      const newLog: EventLog = {
+        id: `l${Date.now()}`,
+        name: nextEnabled ? 'Bật dịch vụ kiểm tra dữ liệu' : 'Xóa cấu hình dịch vụ kiểm tra dữ liệu',
+        status: 'success',
+        startTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        modifiedBy: 'Nguyễn Văn A',
+        changeDescription: description
+      };
+      setEventLogs(prev => [newLog, ...prev]);
+    }
+    
+    setSelectedSource(updatedSource);
+    setSources(prev => prev.map(s => s.id === selectedSource.id ? updatedSource : s));
   };
 
-  const toggleReconciliation = () => {
+  const toggleReconciliation = (description?: string) => {
     if (!selectedSource) return;
-    setSelectedSource({ 
+    const nextEnabled = !selectedSource.isReconciliationEnabled;
+    const updatedSource = { 
       ...selectedSource, 
-      isReconciliationEnabled: !selectedSource.isReconciliationEnabled 
-    });
-    showNotification(`Dịch vụ đối soát đã được ${!selectedSource.isReconciliationEnabled ? 'bật' : 'tắt'}.`);
+      isReconciliationEnabled: nextEnabled 
+    };
+    setSelectedSource(updatedSource);
+    setSources(prev => prev.map(s => s.id === selectedSource.id ? updatedSource : s));
+
+    if (description) {
+      const newLog: EventLog = {
+        id: `l${Date.now()}`,
+        name: nextEnabled ? 'Bật dịch vụ đối soát' : 'Tắt dịch vụ đối soát',
+        status: 'success',
+        startTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        modifiedBy: 'Nguyễn Văn A',
+        changeDescription: description
+      };
+      setEventLogs(prev => [newLog, ...prev]);
+    }
   };
   
   // List State
@@ -1110,24 +1222,15 @@ export default function App() {
     ministry: '',
     unit: '',
     api: '',
-    secret: '',
+    apiPublic: '',
+    apiKey: '',
     whitelist: [] as string[],
     tags: [] as string[]
   });
 
   useEffect(() => {
-    if (newSource.api && !newSource.secret) {
-      setNewSource(prev => ({
-        ...prev,
-        secret: 'AK-' + Math.random().toString(36).substring(2, 12).toUpperCase()
-      }));
-    } else if (!newSource.api && newSource.secret) {
-      setNewSource(prev => ({
-        ...prev,
-        secret: ''
-      }));
-    }
-  }, [newSource.api, newSource.secret]);
+    // API logic removed from here as it should be generated upon completion
+  }, []);
 
   const [sampleType, setSampleType] = useState<'XML' | 'CSV'>('XML');
   const [sampleContent, setSampleContent] = useState('');
@@ -1137,8 +1240,6 @@ export default function App() {
   const [deleteFieldConfirm, setDeleteFieldConfirm] = useState<string | null>(null);
   const [isEditingSchema, setIsEditingSchema] = useState(false);
   const [editingSchema, setEditingSchema] = useState<any[]>([]);
-  const [isSaveAsNewVersionModalOpen, setIsSaveAsNewVersionModalOpen] = useState(false);
-  const [newVersionInfo, setNewVersionInfo] = useState({ name: '', description: '' });
 
   const removeField = (fieldId: string) => {
     const targetSchema = isEditingSchema ? editingSchema : detectedSchema;
@@ -1261,9 +1362,10 @@ export default function App() {
 
   const handleDetectSchema = () => {
     setIsDetecting(true);
+    const setSchema = isEditingSchema ? setEditingSchema : setDetectedSchema;
     setTimeout(() => {
       if (sampleType === 'XML') {
-        setDetectedSchema([
+        setSchema([
           { id: '1', name: 'TrangThaiDuLieu', isGreenFlow: false, isRequired: false, dataType: 'Đối tượng (Object)', conditions: [], isEditing: false, children: [
             { id: '1-1', name: 'SuKien', isGreenFlow: false, isRequired: false, dataType: 'Chữ (String)', conditions: [], isEditing: false },
             { id: '1-2', name: 'LoaiSuKien', isGreenFlow: false, isRequired: false, dataType: 'Chữ (String)', conditions: [], isEditing: false },
@@ -1290,6 +1392,11 @@ export default function App() {
       setIsDetecting(false);
     }, 1500);
   };
+
+  // Tags State
+  const [isEditingTags, setIsEditingTags] = useState(false);
+  const [editingTags, setEditingTags] = useState<string[]>([]);
+  const [newTagInput, setNewTagInput] = useState('');
 
   // Reconciliation State
   const [reconView, setReconView] = useState<'list' | 'detail'>('list');
@@ -1366,9 +1473,11 @@ export default function App() {
     });
 
   const extractionStats = {
-    total: filteredExtractionRecords.length,
+    total: filteredExtractionRecords.length, // Total requests
+    records: filteredExtractionRecords.length, // Consistent with context "1 request = 1 record"
     success: filteredExtractionRecords.filter(r => r.status === 'success').length,
     error: filteredExtractionRecords.filter(r => r.status === 'error').length,
+    totalSize: filteredExtractionRecords.reduce((acc, r) => acc + (r.size || 0), 0),
     avgProcessingTime: filteredExtractionRecords.length > 0 
       ? Math.round(filteredExtractionRecords.reduce((acc, r) => acc + parseInt(r.processingTime), 0) / filteredExtractionRecords.length)
       : 0
@@ -1402,11 +1511,13 @@ export default function App() {
     });
 
   const reconStats = {
-    total: filteredReconciliationRecords.length,
+    total: filteredReconciliationRecords.length, // Total requests
+    records: filteredReconciliationRecords.reduce((acc, r) => acc + (r.totalRecords || 0), 0), // Total records
     databases: new Set(filteredReconciliationRecords.map(r => r.sourceName)).size,
     success: filteredReconciliationRecords.filter(r => r.status === 'success').length,
     dataError: filteredReconciliationRecords.filter(r => r.status === 'data_error').length,
     connectionError: filteredReconciliationRecords.filter(r => r.status === 'connection_error').length,
+    totalSize: filteredReconciliationRecords.reduce((acc, r) => acc + (r.size || 0), 0),
     avgProcessingTime: filteredReconciliationRecords.length > 0 
       ? (filteredReconciliationRecords.reduce((acc, r) => acc + parseInt(r.processingTime || '0'), 0) / filteredReconciliationRecords.length).toFixed(0) 
       : '0',
@@ -1436,6 +1547,17 @@ export default function App() {
 
   const handleSourceClick = (source: SourceDatabase) => {
     setSelectedSource(source);
+    setServiceBasicInfo({
+      name: source.name,
+      code: source.code,
+      dataType: source.dataType,
+      categoryType: source.categoryType || '',
+      ministry: source.ministry,
+      unit: source.unit,
+      api: source.api || '',
+      apiPublic: source.apiPublic || '',
+      apiKey: source.apiKey || ''
+    });
     setView('detail');
     setDetailTab('overview');
     setDetailReconCategories([
@@ -1515,7 +1637,7 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const filteredSources = MOCK_SOURCES
+  const filteredSources = sources
     .filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .filter(s => filters.ministries.length === 0 || filters.ministries.includes(s.ministry))
     .filter(s => filters.units.length === 0 || filters.units.includes(s.unit))
@@ -1625,6 +1747,16 @@ export default function App() {
       setWizardStep(wizardStep + 1);
     } else {
       // Direct success without connection check
+      // Generate API Public and API Key upon completion
+      const generatedPublic = 'PUB-' + newSource.code + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+      const generatedKey = 'AK-' + Math.random().toString(36).substring(2, 12).toUpperCase();
+      
+      setNewSource(prev => ({
+        ...prev,
+        apiPublic: generatedPublic,
+        apiKey: generatedKey
+      }));
+
       setWizardStep(5);
       setConnectionResult('success');
     }
@@ -1979,7 +2111,7 @@ export default function App() {
                     />
                     <MultiSelectFilter 
                       label="Tag"
-                      options={Array.from(new Set(MOCK_SOURCES.flatMap(s => s.tags || []))).map(tag => ({ label: tag, value: tag }))}
+                      options={Array.from(new Set(sources.flatMap(s => s.tags || []))).map((tag: string) => ({ label: tag, value: tag }))}
                       selectedValues={tempFilters.tags}
                       onChange={(vals) => setTempFilters({...tempFilters, tags: vals})}
                       placeholder="Tất cả tag"
@@ -2403,15 +2535,27 @@ export default function App() {
 
           {/* Statistics Section */}
           <div className="p-6 bg-gray-50/50 border-b border-gray-100 shrink-0">
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-6 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0">
+                  <RefreshCw size={20} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tổng số lượt nhận</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-bold text-gray-900">{reconStats.total.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0">
                   <Database size={20} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tổng bản ghi</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tổng bản ghi đã nhận</p>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xl font-bold text-gray-900">{reconStats.total.toLocaleString()}</span>
+                    <span className="text-xl font-bold text-gray-900">{reconStats.records.toLocaleString()}</span>
                     <span className="text-[10px] text-gray-500 font-medium">({reconStats.databases} dịch vụ)</span>
                   </div>
                 </div>
@@ -2422,7 +2566,7 @@ export default function App() {
                   <CheckCircle2 size={20} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Thành công</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Số bản ghi thành công</p>
                   <div className="flex items-baseline gap-2">
                     <span className="text-xl font-bold text-gray-900">{reconStats.success.toLocaleString()}</span>
                     <span className="text-[10px] text-green-600 font-bold">{reconStatsPerc.success}%</span>
@@ -2435,10 +2579,22 @@ export default function App() {
                   <AlertCircle size={20} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Lỗi dữ liệu</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Số bản ghi lỗi dữ liệu</p>
                   <div className="flex items-baseline gap-2">
                     <span className="text-xl font-bold text-gray-900">{reconStats.dataError.toLocaleString()}</span>
                     <span className="text-[10px] text-red-600 font-bold">{reconStatsPerc.dataError}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center shrink-0">
+                  <HardDrive size={20} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tổng dung lượng đã kiểm tra</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-lg font-bold text-gray-900">{formatFileSize(reconStats.totalSize)}</span>
                   </div>
                 </div>
               </div>
@@ -2448,7 +2604,7 @@ export default function App() {
                   <Clock size={20} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Xử lý trung bình</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Thời gian kiểm tra trung bình</p>
                   <div className="flex items-baseline gap-2">
                     <span className="text-xl font-bold text-gray-900">{reconStats.avgProcessingTime}ms</span>
                   </div>
@@ -2499,6 +2655,18 @@ export default function App() {
                   </th>
                   <th className="px-6 py-4 font-semibold">Bộ</th>
                   <th className="px-6 py-4 font-semibold">Đơn vị</th>
+                  <th 
+                    className={cn(
+                      "px-6 py-4 font-semibold cursor-pointer hover:text-blue-600 transition-colors text-center",
+                      reconSortConfig?.key === 'size' && "text-blue-600 bg-blue-50/30"
+                    )} 
+                    onClick={() => handleReconSort('size')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      Dung lượng
+                      {reconSortConfig?.key === 'size' ? (reconSortConfig.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
+                    </div>
+                  </th>
                   <th className="px-6 py-4 font-semibold">Tổng bản ghi</th>
                   <th className="px-6 py-4 font-semibold text-center text-green-600">Thành công</th>
                   <th className="px-6 py-4 font-semibold text-center text-red-600">Thất bại</th>
@@ -2542,6 +2710,9 @@ export default function App() {
                       <td className="px-6 py-4 text-xs text-gray-600">{item.sourceName}</td>
                       <td className="px-6 py-4 text-xs text-gray-600">{item.ministry || '—'}</td>
                       <td className="px-6 py-4 text-xs text-gray-600">{item.unit || '—'}</td>
+                      <td className="px-6 py-4 text-center text-xs font-mono text-gray-600">
+                        {item.size ? formatFileSize(item.size) : '-'}
+                      </td>
                       <td className="px-6 py-4 text-xs font-bold text-gray-900">
                         <button 
                           onClick={(e) => {
@@ -2671,13 +2842,13 @@ export default function App() {
 
   const renderWizard = () => {
     const steps = [
-      { id: 1, title: 'Thông tin cơ bản & Xác thực' },
+      { id: 1, title: 'Thông tin cơ bản' },
       { id: 2, title: 'Cấu hình dịch vụ kiểm tra dữ liệu' },
       { id: 3, title: 'Cấu hình dịch vụ đối soát dữ liệu' },
       { id: 4, title: 'Bảo mật nâng cao' }
     ];
 
-    const isStep1Valid = newSource.name && newSource.code && newSource.dataType && (newSource.dataType === 'category' ? newSource.categoryType : true) && newSource.ministry && newSource.unit && newSource.api && newSource.secret;
+    const isStep1Valid = newSource.name && newSource.code && newSource.dataType && (newSource.dataType === 'category' ? newSource.categoryType : true) && newSource.ministry && newSource.unit && newSource.api;
     const isStep2Valid = detectedSchema.length > 0;
     const isStep3Valid = reconCategories.some(cat => cat.options.some(opt => opt.enabled));
 
@@ -2722,7 +2893,7 @@ export default function App() {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
-                <h2 className="text-xl font-bold">Thông tin cơ bản & Xác thực</h2>
+                <h2 className="text-xl font-bold">Thông tin cơ bản</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2833,28 +3004,6 @@ export default function App() {
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      API key <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input 
-                        type={showApiKey ? "text" : "password"}
-                        placeholder="Hệ thống tự động điền" 
-                        className="w-full px-4 py-2 pr-10 rounded-lg border border-gray-100 bg-gray-50 text-gray-500 outline-none cursor-not-allowed"
-                        value={newSource.secret}
-                        readOnly
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
-                      >
-                        {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </motion.div>
             )}
@@ -2939,12 +3088,11 @@ export default function App() {
                               <th className="px-4 py-3">Trường</th>
                               <th className="px-4 py-3 text-center">Bắt buộc</th>
                               <th className="px-4 py-3">Kiểu dữ liệu</th>
-                              <th colSpan={3} className="px-4 py-3 text-center border-l border-gray-200">
+                              <th colSpan={2} className="px-4 py-3 text-center border-l border-gray-200">
                                 <div className="flex flex-col items-center">
                                   <span className="text-[10px] text-gray-400 mb-1">Danh sách điều kiện</span>
-                                  <div className="grid grid-cols-3 w-full">
+                                  <div className="grid grid-cols-2 w-full">
                                     <span>Loại</span>
-                                    <span>Thông báo báo lỗi</span>
                                     <span>Điều kiện</span>
                                   </div>
                                 </div>
@@ -2988,11 +3136,11 @@ export default function App() {
                                       <option value="Đối tượng (Object)">Đối tượng (Object)</option>
                                     </select>
                                   </td>
-                                  <td colSpan={3} className="p-0 border-l border-gray-100">
+                                  <td colSpan={2} className="p-0 border-l border-gray-100">
                                     <div className="flex flex-col">
                                       {field.conditions?.map((cond: any) => (
                                         <div key={cond.id} className="flex items-center gap-2 p-2 border-b border-gray-50 last:border-0">
-                                          <div className="w-1/3">
+                                          <div className="w-1/2">
                                             <select 
                                               value={cond.type}
                                               onChange={(e) => updateCondition(field.id, cond.id, { type: e.target.value })}
@@ -3002,15 +3150,6 @@ export default function App() {
                                               <option>Ít nhất một</option>
                                               <option>Bắt buộc (có điều kiện)</option>
                                             </select>
-                                          </div>
-                                          <div className="w-1/3">
-                                            <input 
-                                              type="text"
-                                              placeholder="Thông báo lỗi"
-                                              value={cond.errorMessage}
-                                              onChange={(e) => updateCondition(field.id, cond.id, { errorMessage: e.target.value })}
-                                              className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                            />
                                           </div>
                                           <div className="flex-1 flex gap-2 items-center">
                                             {cond.type === 'Bắt buộc (có điều kiện)' ? (
@@ -3112,11 +3251,11 @@ export default function App() {
                                         <option value="Đối tượng (Object)">Đối tượng (Object)</option>
                                       </select>
                                     </td>
-                                     <td colSpan={3} className="p-0 border-l border-gray-100">
+                                     <td colSpan={2} className="p-0 border-l border-gray-100">
                                        <div className="flex flex-col">
                                          {child.conditions?.map((cond: any) => (
                                            <div key={cond.id} className="flex items-center gap-2 p-2 border-b border-gray-50 last:border-0">
-                                             <div className="w-1/3">
+                                             <div className="w-1/2">
                                                <select 
                                                  value={cond.type}
                                                  onChange={(e) => updateCondition(child.id, cond.id, { type: e.target.value })}
@@ -3126,15 +3265,6 @@ export default function App() {
                                                  <option>Ít nhất một</option>
                                                  <option>Bắt buộc (có điều kiện)</option>
                                                </select>
-                                             </div>
-                                             <div className="w-1/3">
-                                               <input 
-                                                 type="text"
-                                                 placeholder="Thông báo lỗi"
-                                                 value={cond.errorMessage}
-                                                 onChange={(e) => updateCondition(child.id, cond.id, { errorMessage: e.target.value })}
-                                                 className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                               />
                                              </div>
                                              <div className="flex-1 flex gap-2 items-center">
                                                {cond.type === 'Bắt buộc (có điều kiện)' ? (
@@ -3374,10 +3504,63 @@ export default function App() {
                   <CheckCircle2 size={40} />
                 </div>
                 <h2 className="text-2xl font-bold mb-2">Thêm thành công!</h2>
-                <p className="text-gray-500 mb-8">Dịch vụ trích rút dữ liệu "{newSource.name}" đã được thêm thành công vào hệ thống.</p>
+                <p className="text-gray-500 mb-8 max-w-md mx-auto">Dịch vụ trích rút dữ liệu "{newSource.name}" đã được thêm thành công. Vui lòng cung cấp các thông tin dưới đây cho đơn vị tích hợp.</p>
+                
+                <div className="w-full max-w-md bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-4 mb-8">
+                  <div className="text-left">
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">API Public</label>
+                    <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                      <span className="text-sm font-mono text-blue-600">{newSource.apiPublic}</span>
+                      <button onClick={() => {navigator.clipboard.writeText(newSource.apiPublic); showNotification('Đã sao chép API Public');}} className="text-gray-400 hover:text-blue-600 p-1"><Copy size={16} /></button>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">API Key</label>
+                    <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                      <span className="text-sm font-mono text-blue-600">{showApiKey ? newSource.apiKey : '•'.repeat(16)}</span>
+                      <div className="flex gap-2">
+                        <button onClick={() => setShowApiKey(!showApiKey)} className="text-gray-400 hover:text-gray-600 p-1">
+                          {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                        <button onClick={() => {navigator.clipboard.writeText(newSource.apiKey); showNotification('Đã sao chép API Key');}} className="text-gray-400 hover:text-blue-600 p-1"><Copy size={16} /></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <button 
-                  onClick={() => setView('list')}
-                  className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors"
+                  onClick={() => {
+                    // Update sources list with the new source
+                    const addedSource: SourceDatabase = {
+                      id: `s${Date.now()}`,
+                      name: newSource.name,
+                      code: newSource.code,
+                      dataType: newSource.dataType,
+                      categoryType: newSource.categoryType,
+                      ministry: newSource.ministry,
+                      unit: newSource.unit,
+                      creator: 'Nguyễn Văn A',
+                      status: 'connected',
+                      lastUpdated: new Date().toISOString().replace('T', ' ').substring(0, 16),
+                      type: 'REST API',
+                      api: newSource.api,
+                      apiPublic: newSource.apiPublic,
+                      apiKey: newSource.apiKey,
+                      tableCount: detectedSchema.length,
+                      syncs: [],
+                      whitelist: newSource.whitelist,
+                      permissions: [
+                        { id: 'u1', name: 'Nguyễn Văn A', email: 'a@gov.vn', role: 'editor', avatar: 'https://i.pravatar.cc/150?u=a' }
+                      ],
+                      schema: detectedSchema,
+                      tags: newSource.tags,
+                      isNormalizationEnabled: true,
+                      isReconciliationEnabled: true
+                    };
+                    setSources(prev => [addedSource, ...prev]);
+                    setView('list');
+                  }}
+                  className="bg-blue-600 text-white px-12 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
                 >
                   Hoàn tất
                 </button>
@@ -3507,6 +3690,10 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500 w-32">KẾT THÚC:</span>
                         <span className="font-bold text-gray-900">{selectedRecon.endTime}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500 w-32">DUNG LƯỢNG:</span>
+                        <span className="font-bold text-gray-900">{formatFileSize(selectedRecon.size || 0)}</span>
                       </div>
                     </div>
 
@@ -4063,14 +4250,23 @@ export default function App() {
           </div>
 
           {/* Statistics Summary */}
-          <div className="p-4 grid grid-cols-4 gap-4 bg-gray-50/50 border-b border-gray-100 shrink-0">
+          <div className="p-4 grid grid-cols-6 gap-4 bg-gray-50/50 border-b border-gray-100 shrink-0">
+            <div className="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-4">
+              <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
+                <RefreshCw size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tổng số lượt nhận</p>
+                <p className="text-xl font-bold text-gray-900">{extractionStats.total}</p>
+              </div>
+            </div>
             <div className="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-4">
               <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
                 <Database size={20} />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tổng bản ghi</p>
-                <p className="text-xl font-bold text-gray-900">{extractionStats.total}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tổng bản ghi đã nhận</p>
+                <p className="text-xl font-bold text-gray-900">{extractionStats.records}</p>
               </div>
             </div>
             <div className="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-4">
@@ -4078,7 +4274,7 @@ export default function App() {
                 <CheckCircle2 size={20} />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Thành công</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Số bản ghi thành công</p>
                 <p className="text-xl font-bold text-green-600">{extractionStats.success}</p>
               </div>
             </div>
@@ -4087,8 +4283,17 @@ export default function App() {
                 <XCircle size={20} />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Thất bại</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Số bản ghi thất bại</p>
                 <p className="text-xl font-bold text-red-600">{extractionStats.error}</p>
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-4">
+              <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-lg flex items-center justify-center">
+                <HardDrive size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tổng dung lượng đã nhận</p>
+                <p className="text-lg font-bold text-gray-900">{formatFileSize(extractionStats.totalSize)}</p>
               </div>
             </div>
             <div className="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-4">
@@ -4096,7 +4301,7 @@ export default function App() {
                 <Clock size={20} />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Xử lý trung bình</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Thời gian trích rút trung bình</p>
                 <p className="text-xl font-bold text-gray-900">{extractionStats.avgProcessingTime}ms</p>
               </div>
             </div>
@@ -4147,6 +4352,18 @@ export default function App() {
                   <th 
                     className={cn(
                       "px-6 py-4 font-semibold cursor-pointer hover:text-blue-600 transition-colors text-center",
+                      extractionSortConfig?.key === 'size' && "text-blue-600 bg-blue-50/30"
+                    )} 
+                    onClick={() => handleExtractionSort('size')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      Dung lượng
+                      {extractionSortConfig?.key === 'size' ? (extractionSortConfig.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
+                    </div>
+                  </th>
+                  <th 
+                    className={cn(
+                      "px-6 py-4 font-semibold cursor-pointer hover:text-blue-600 transition-colors text-center",
                       extractionSortConfig?.key === 'status' && "text-blue-600 bg-blue-50/30"
                     )} 
                     onClick={() => handleExtractionSort('status')}
@@ -4188,6 +4405,9 @@ export default function App() {
                     <td className="px-6 py-4 text-xs text-gray-600">{item.sourceName}</td>
                     <td className="px-6 py-4 text-xs text-gray-600">{item.ministry}</td>
                     <td className="px-6 py-4 text-xs text-gray-600">{item.unit}</td>
+                    <td className="px-6 py-4 text-center text-xs font-mono text-gray-600">
+                      {item.size ? formatFileSize(item.size) : '-'}
+                    </td>
                     <td className="px-6 py-4 text-center">
                       <span 
                         className={cn(
@@ -4331,6 +4551,10 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500 w-32">KẾT THÚC:</span>
                         <span className="font-bold text-gray-900">{selectedExtraction.endTime}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500 w-32">DUNG LƯỢNG:</span>
+                        <span className="font-bold text-gray-900">{formatFileSize(selectedExtraction.size || 0)}</span>
                       </div>
                     </div>
 
@@ -4594,12 +4818,88 @@ export default function App() {
   const renderEditSchema = () => {
     if (!selectedSource) return null;
 
+    if (isStartingNewSchema && editingSchema.length === 0) {
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => {
+                  setIsEditingSchema(false);
+                  setIsStartingNewSchema(false);
+                }} 
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 className="text-xl font-bold">Tạo mới tiêu chí kiểm tra dữ liệu</h2>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-[32px] p-8 shadow-sm space-y-6">
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-gray-800">Cấu hình nguồn dữ liệu mẫu</h3>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setSampleType('XML')}
+                  className={cn(
+                    "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
+                    sampleType === 'XML' ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  )}
+                >
+                  XML
+                </button>
+                <button 
+                  onClick={() => setSampleType('CSV')}
+                  className={cn(
+                    "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
+                    sampleType === 'CSV' ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  )}
+                >
+                  CSV
+                </button>
+              </div>
+
+              <div className="relative">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  <span className="text-red-500">*</span> {sampleType} mẫu {sampleType === 'CSV' && "(Cấu hình nguồn-export từ 'Export CSV')"}
+                </label>
+                <textarea 
+                  className="w-full h-64 px-4 py-4 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-mono text-sm resize-none"
+                  placeholder={`Dán nội dung ${sampleType} mẫu vào đây...`}
+                  value={sampleContent}
+                  onChange={(e) => setSampleContent(e.target.value)}
+                />
+                <div className="absolute bottom-6 right-6 flex gap-3">
+                  <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors">
+                    <Upload size={18} />
+                    Tải file
+                  </button>
+                  <button 
+                    onClick={handleDetectSchema}
+                    disabled={!sampleContent || isDetecting}
+                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-100"
+                  >
+                    {isDetecting ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                    Phát hiện cấu hình
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button 
-              onClick={() => setIsEditingSchema(false)} 
+              onClick={() => {
+                setIsEditingSchema(false);
+                setIsStartingNewSchema(false);
+              }} 
               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
               title="Quay lại"
             >
@@ -4608,6 +4908,31 @@ export default function App() {
             <h2 className="text-xl font-bold">Sửa tiêu chí kiểm tra dữ liệu</h2>
           </div>
           <div className="flex gap-3">
+            <button
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.xml,.csv';
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) {
+                    showNotification(`Đang nhập dữ liệu từ file ${file.name}...`);
+                    // Simulate detection
+                    setTimeout(() => {
+                      setEditingSchema([
+                        { id: 'f1', name: 'FieldFrom' + file.name.split('.')[0], isGreenFlow: false, isRequired: true, dataType: 'Chữ (String)', conditions: [], isEditing: false }
+                      ]);
+                      showNotification('Nhập dữ liệu thành công.');
+                    }, 1000);
+                  }
+                };
+                input.click();
+              }}
+              className="px-4 py-2 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors font-medium flex items-center gap-2"
+            >
+              <Upload size={16} />
+              Nhập từ file
+            </button>
             <button 
               onClick={() => setIsEditingSchema(false)}
               className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium"
@@ -4616,8 +4941,8 @@ export default function App() {
             </button>
             <button 
               onClick={() => {
-                setNewVersionInfo({ name: '', description: '' });
-                setIsSaveAsNewVersionModalOpen(true);
+                setNormalizationDraftInfo({ applyDate: '', description: '' });
+                setIsNormalizationDraftModalOpen(true);
               }}
               className="px-6 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-all font-bold shadow-lg shadow-blue-200"
             >
@@ -4633,7 +4958,7 @@ export default function App() {
                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider w-1/4">Trường dữ liệu</th>
                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-center w-24">Bắt buộc</th>
                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider w-40">Kiểu dữ liệu</th>
-                <th colSpan={3} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Điều kiện & Ràng buộc</th>
+                <th colSpan={2} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Điều kiện & Ràng buộc</th>
                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-center w-24">Thao tác</th>
               </tr>
             </thead>
@@ -4671,11 +4996,11 @@ export default function App() {
                         <option value="Đối tượng (Object)">Đối tượng (Object)</option>
                       </select>
                     </td>
-                    <td colSpan={3} className="p-0 border-l border-gray-100">
+                    <td colSpan={2} className="p-0 border-l border-gray-100">
                       <div className="flex flex-col">
                         {field.conditions?.map((cond: any) => (
                           <div key={cond.id} className="flex items-center gap-2 p-2 border-b border-gray-50 last:border-0">
-                            <div className="w-1/3">
+                            <div className="w-1/2">
                               <select 
                                 value={cond.type}
                                 onChange={(e) => updateCondition(field.id, cond.id, { type: e.target.value })}
@@ -4685,15 +5010,6 @@ export default function App() {
                                 <option>Ít nhất một</option>
                                 <option>Bắt buộc (có điều kiện)</option>
                               </select>
-                            </div>
-                            <div className="w-1/3">
-                              <input 
-                                type="text"
-                                placeholder="Thông báo lỗi"
-                                value={cond.errorMessage}
-                                onChange={(e) => updateCondition(field.id, cond.id, { errorMessage: e.target.value })}
-                                className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              />
                             </div>
                             <div className="flex-1 flex gap-2 items-center">
                               {cond.type === 'Bắt buộc (có điều kiện)' ? (
@@ -4795,11 +5111,11 @@ export default function App() {
                           <option value="Đối tượng (Object)">Đối tượng (Object)</option>
                         </select>
                       </td>
-                       <td colSpan={3} className="p-0 border-l border-gray-100">
+                       <td colSpan={2} className="p-0 border-l border-gray-100">
                          <div className="flex flex-col">
                            {child.conditions?.map((cond: any) => (
                              <div key={cond.id} className="flex items-center gap-2 p-2 border-b border-gray-50 last:border-0">
-                               <div className="w-1/3">
+                               <div className="w-1/2">
                                  <select 
                                    value={cond.type}
                                    onChange={(e) => updateCondition(child.id, cond.id, { type: e.target.value })}
@@ -4809,15 +5125,6 @@ export default function App() {
                                    <option>Ít nhất một</option>
                                    <option>Bắt buộc (có điều kiện)</option>
                                  </select>
-                               </div>
-                               <div className="w-1/3">
-                                 <input 
-                                   type="text"
-                                   placeholder="Thông báo lỗi"
-                                   value={cond.errorMessage}
-                                   onChange={(e) => updateCondition(child.id, cond.id, { errorMessage: e.target.value })}
-                                   className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                 />
                                </div>
                                <div className="flex-1 flex gap-2 items-center">
                                  {cond.type === 'Bắt buộc (có điều kiện)' ? (
@@ -4897,107 +5204,8 @@ export default function App() {
     );
   };
 
-  const renderSaveAsNewVersionModal = () => (
-    <AnimatePresence>
-      {isSaveAsNewVersionModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsSaveAsNewVersionModalOpen(false)}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-          />
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden"
-          >
-            <div className="p-8 border-b border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-2xl font-bold text-[#1e293b]">Lưu phiên bản mới</h3>
-                <button onClick={() => setIsSaveAsNewVersionModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-all">
-                  <X size={24} />
-                </button>
-              </div>
-              <p className="text-gray-500">Vui lòng nhập thông tin phiên bản để lưu lại lịch sử thay đổi.</p>
-            </div>
             
-            <div className="p-8 space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">
-                  Tên phiên bản <span className="text-red-500">*</span>
-                </label>
-                <input 
-                  type="text" 
-                  placeholder="Ví dụ: Cập nhật tiêu chí tháng 4"
-                  value={newVersionInfo.name}
-                  onChange={(e) => setNewVersionInfo({ ...newVersionInfo, name: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">
-                  Mô tả thay đổi <span className="text-red-500">*</span>
-                </label>
-                <textarea 
-                  rows={4}
-                  placeholder="Nhập chi tiết các thay đổi..."
-                  value={newVersionInfo.description}
-                  onChange={(e) => setNewVersionInfo({ ...newVersionInfo, description: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all resize-none"
-                />
-              </div>
-            </div>
 
-            <div className="p-8 border-t border-gray-100 flex gap-4">
-              <button 
-                onClick={() => setIsSaveAsNewVersionModalOpen(false)}
-                className="flex-1 py-3.5 border border-gray-200 text-gray-700 font-bold rounded-2xl hover:bg-gray-50 transition-all"
-              >
-                Hủy
-              </button>
-              <button 
-                disabled={!newVersionInfo.name.trim() || !newVersionInfo.description.trim()}
-                onClick={() => {
-                  if (!selectedSource) return;
-                  
-                  const nextVersionNum = (selectedSource.schemaVersions?.length || 0) + 1;
-                  const newVersion = {
-                    id: Math.random().toString(36).substr(2, 9),
-                    version: `1.0.${nextVersionNum}`,
-                    versionName: newVersionInfo.name,
-                    createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-                    createdBy: 'Nguyễn Văn A',
-                    description: newVersionInfo.description,
-                    tableCount: editingSchema.length,
-                    schema: JSON.parse(JSON.stringify(editingSchema)) // Snapshot
-                  };
-                  
-                  const updatedSource = {
-                    ...selectedSource,
-                    schema: editingSchema,
-                    schemaVersion: newVersion.version,
-                    schemaVersions: [newVersion, ...(selectedSource.schemaVersions || [])]
-                  };
-                  
-                  setSelectedSource(updatedSource);
-                  setIsSaveAsNewVersionModalOpen(false);
-                  setIsEditingSchema(false);
-                  setNewVersionInfo({ name: '', description: '' });
-                  showNotification(`Đã lưu phiên bản "${newVersion.versionName}" thành công.`);
-                }}
-                className="flex-1 py-3.5 bg-[#2563eb] text-white font-bold rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Xác nhận lưu
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
 
   useEffect(() => {
     if (selectedSource) {
@@ -5076,27 +5284,48 @@ export default function App() {
                 <Power size={32} />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">
-                Xác nhận {selectedSource?.isNormalizationEnabled ? 'tắt' : 'bật'} dịch vụ
+                Xác nhận {selectedSource?.isNormalizationEnabled ? 'xóa cấu hình' : 'kích hoạt'} dịch vụ
               </h3>
-              <p className="text-gray-500">
-                Bạn có chắc chắn muốn {selectedSource?.isNormalizationEnabled ? 'tắt' : 'bật'} dịch vụ kiểm tra phục vụ chuẩn hóa dữ liệu không?
+              <p className={cn("text-gray-500", selectedSource?.isNormalizationEnabled ? "mb-6" : "mb-0")}>
+                Bạn có chắc chắn muốn {selectedSource?.isNormalizationEnabled ? 'xóa cấu hình' : 'kích hoạt'} dịch vụ kiểm tra phục vụ chuẩn hóa dữ liệu không?
               </p>
+
+              {selectedSource?.isNormalizationEnabled && (
+                <div className="text-left space-y-2 mb-6">
+                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+                    Mô tả thay đổi <span className="text-red-500">*</span>
+                  </label>
+                  <textarea 
+                    rows={3}
+                    placeholder="Nhập chi tiết lý do thay đổi..."
+                    value={deactivationDescription}
+                    onChange={(e) => setDeactivationDescription(e.target.value)}
+                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all resize-none"
+                  />
+                </div>
+              )}
             </div>
             
             <div className="p-6 bg-gray-50 flex gap-3">
               <button 
-                onClick={() => setIsNormalizationConfirmOpen(false)}
+                onClick={() => {
+                  setIsNormalizationConfirmOpen(false);
+                  setDeactivationDescription('');
+                }}
                 className="flex-1 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-all"
               >
                 Hủy
               </button>
               <button 
+                disabled={selectedSource?.isNormalizationEnabled && !deactivationDescription.trim()}
                 onClick={() => {
-                  toggleNormalization();
+                  toggleNormalization(selectedSource?.isNormalizationEnabled ? deactivationDescription : undefined);
                   setIsNormalizationConfirmOpen(false);
+                  setDeactivationDescription('');
+                  showNotification(`Đã ${selectedSource?.isNormalizationEnabled ? 'xóa' : 'kích hoạt'} dịch vụ thành công.`);
                 }}
                 className={cn(
-                  "flex-1 py-3 text-white font-bold rounded-xl transition-all shadow-lg",
+                  "flex-1 py-3 text-white font-bold rounded-xl transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed",
                   selectedSource?.isNormalizationEnabled ? "bg-red-600 hover:bg-red-700 shadow-red-100" : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"
                 )}
               >
@@ -5136,14 +5365,17 @@ export default function App() {
               <h3 className="text-xl font-bold text-gray-900 mb-2">
                 Xác nhận {selectedSource?.isReconciliationEnabled ? 'tắt' : 'bật'} dịch vụ
               </h3>
-              <p className="text-gray-500">
+              <p className="text-gray-500 mb-6">
                 Bạn có chắc chắn muốn {selectedSource?.isReconciliationEnabled ? 'tắt' : 'bật'} dịch vụ đối soát dữ liệu không?
               </p>
             </div>
             
             <div className="p-6 bg-gray-50 flex gap-3">
               <button 
-                onClick={() => setIsReconciliationConfirmOpen(false)}
+                onClick={() => {
+                  setIsReconciliationConfirmOpen(false);
+                  setDeactivationDescription('');
+                }}
                 className="flex-1 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-all"
               >
                 Hủy
@@ -5152,6 +5384,8 @@ export default function App() {
                 onClick={() => {
                   toggleReconciliation();
                   setIsReconciliationConfirmOpen(false);
+                  setDeactivationDescription('');
+                  showNotification(`Đã ${selectedSource?.isReconciliationEnabled ? 'tắt' : 'bật'} dịch vụ thành công.`);
                 }}
                 className={cn(
                   "flex-1 py-3 text-white font-bold rounded-xl transition-all shadow-lg",
@@ -5194,7 +5428,7 @@ export default function App() {
                 </div>
                 
                 <h3 className="text-2xl font-bold text-[#1e293b] mb-4">
-                  Xác nhận {isDeactivating ? 'vô hiệu hóa' : 'kích hoạt'}
+                  Xác nhận {isDeactivating ? 'xóa cấu hình dịch vụ trích rút dữ liệu' : 'kích hoạt cấu hình dịch vụ trích rút dữ liệu'}
                 </h3>
                 <p className="text-lg text-gray-500 mb-10 leading-relaxed">
                   {isDeactivating 
@@ -5205,7 +5439,10 @@ export default function App() {
 
               <div className="border-t border-gray-100 p-8 flex justify-end gap-4">
                 <button 
-                  onClick={() => setIsStatusConfirmOpen(false)}
+                  onClick={() => {
+                    setIsStatusConfirmOpen(false);
+                    setDeactivationDescription('');
+                  }}
                   className="px-10 py-3 rounded-2xl border border-gray-200 text-gray-700 font-bold hover:bg-gray-50 transition-all min-w-[140px]"
                 >
                   Hủy
@@ -5214,7 +5451,8 @@ export default function App() {
                   onClick={() => {
                     toggleSourceStatus();
                     setIsStatusConfirmOpen(false);
-                    showNotification(`Đã ${isDeactivating ? 'vô hiệu hóa' : 'kích hoạt'} dịch vụ thành công.`);
+                    setDeactivationDescription('');
+                    showNotification(`Đã ${isDeactivating ? 'xóa cấu hình dịch vụ trích rút dữ liệu' : 'kích hoạt cấu hình dịch vụ trích rút dữ liệu'} thành công.`);
                   }}
                   className="px-10 py-3 rounded-2xl bg-[#2563eb] text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all min-w-[140px]"
                 >
@@ -5227,6 +5465,252 @@ export default function App() {
       </AnimatePresence>
     );
   };
+
+  const renderDraftSelectionModal = () => (
+    <AnimatePresence>
+      {isDraftSelectionModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsDraftSelectionModalOpen(false)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden"
+          >
+            <div className="p-8 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-2xl font-bold text-[#1e293b]">Tùy chọn chỉnh sửa</h3>
+              <button 
+                onClick={() => {
+                  setIsDraftSelectionModalOpen(false);
+                }} 
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-4">
+              <button 
+                onClick={() => {
+                  setEditingSchema(JSON.parse(JSON.stringify(selectedSource?.schema || [])));
+                  setIsEditingSchema(true);
+                  setIsStartingNewSchema(false);
+                  setIsDraftSelectionModalOpen(false);
+                }}
+                className="w-full flex items-center gap-4 p-6 bg-gray-50 border border-gray-100 rounded-3xl hover:bg-blue-50 hover:border-blue-100 transition-all text-left"
+              >
+                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center shrink-0">
+                  <Database size={24} />
+                </div>
+                <div>
+                  <div className="font-bold text-gray-900">Sửa trên cấu hình hiện tại</div>
+                  <div className="text-sm text-gray-500">Tiếp tục chỉnh sửa dựa trên các tiêu chí hiện đang áp dụng.</div>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => {
+                  setEditingSchema([]);
+                  setSampleContent('');
+                  setDetectedSchema([]);
+                  setIsEditingSchema(true);
+                  setIsStartingNewSchema(true);
+                  setIsDraftSelectionModalOpen(false);
+                }}
+                className="w-full flex items-center gap-4 p-6 bg-gray-50 border border-gray-100 rounded-3xl hover:bg-amber-50 hover:border-amber-100 transition-all text-left"
+              >
+                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center shrink-0">
+                  <Plus size={24} />
+                </div>
+                <div>
+                  <div className="font-bold text-gray-900">Tạo mới tiêu chí</div>
+                  <div className="text-sm text-gray-500">Khởi tạo lại bảng tiêu chí (có thể nhập từ file XML/CSV).</div>
+                </div>
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+
+  const renderDraftDetailModal = () => (
+    <AnimatePresence>
+      {isDraftDetailModalOpen && viewingDraft && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsDraftDetailModalOpen(false)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-4xl bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="p-8 border-b border-gray-100">
+              <div className="flex justify-between items-center mb-1">
+                <h3 className="text-2xl font-bold text-[#1e293b]">Chi tiết bản nháp</h3>
+                <button onClick={() => setIsDraftDetailModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={24} />
+                </button>
+              </div>
+              <div className="text-sm text-gray-500">Cập nhật lúc: {viewingDraft.updatedAt} bởi {viewingDraft.updatedBy}</div>
+            </div>
+
+            <div className="p-8 overflow-y-auto flex-1 space-y-8">
+              <div className="grid grid-cols-2 gap-8">
+                <div className="space-y-2">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ngày áp dụng</div>
+                  <div className="text-lg font-bold text-blue-600">{viewingDraft.applyDate || 'N/A'}</div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tiêu chí kiểm tra</div>
+                <div className="bg-gray-50 rounded-3xl border border-gray-100 overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-100/50 text-gray-500 text-[10px] uppercase font-bold">
+                      <tr>
+                        <th className="px-6 py-4">Tên trường</th>
+                        <th className="px-6 py-4">Bắt buộc</th>
+                        <th className="px-6 py-4">Kiểu dữ liệu</th>
+                        <th className="px-6 py-4">Điều kiện</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {viewingDraft.schema.map((field: any) => (
+                        <tr key={field.id} className="hover:bg-white transition-colors">
+                          <td className="px-6 py-4 font-bold text-gray-900">{field.name}</td>
+                          <td className="px-6 py-4">{field.isRequired ? 'YES' : 'NO'}</td>
+                          <td className="px-6 py-4 text-blue-600 font-medium">{field.dataType}</td>
+                          <td className="px-6 py-4 text-gray-500 italic">
+                            {(field.conditions && field.conditions.length > 0) ? field.conditions.join(', ') : 'Không có'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mô tả thay đổi</div>
+                <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 text-gray-600 leading-relaxed italic">
+                  {viewingDraft.description || 'Chưa có mô tả chi tiết cho bản nháp này.'}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 border-t border-gray-100 flex justify-end">
+              <button 
+                onClick={() => setIsDraftDetailModalOpen(false)}
+                className="px-10 py-3 bg-[#1e293b] text-white font-bold rounded-2xl hover:bg-black transition-all shadow-lg"
+              >
+                Đóng
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+
+  const renderNormalizationDraftModal = () => (
+    <AnimatePresence>
+      {isNormalizationDraftModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsNormalizationDraftModalOpen(false)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden"
+          >
+            <div className="p-8 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-2xl font-bold text-[#1e293b]">Thông tin bản nháp</h3>
+              <button onClick={() => setIsNormalizationDraftModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Ngày áp dụng <span className="text-red-500">*</span></label>
+                <input 
+                  type="date"
+                  value={normalizationDraftInfo.applyDate}
+                  onChange={(e) => setNormalizationDraftInfo({ ...normalizationDraftInfo, applyDate: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/20 outline-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Mô tả thay đổi <span className="text-red-500">*</span></label>
+                <textarea 
+                  rows={4}
+                  placeholder="Nhập chi tiết các thay đổi..."
+                  value={normalizationDraftInfo.description}
+                  onChange={(e) => setNormalizationDraftInfo({ ...normalizationDraftInfo, description: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/20 outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 p-8 flex justify-end gap-4">
+              <button 
+                onClick={() => setIsNormalizationDraftModalOpen(false)}
+                className="px-8 py-3 rounded-2xl border border-gray-200 text-gray-700 font-bold hover:bg-gray-50 transition-all"
+              >
+                Quay lại
+              </button>
+              <button 
+                disabled={!normalizationDraftInfo.applyDate || !normalizationDraftInfo.description.trim()}
+                onClick={() => {
+                  if (!selectedSource) return;
+                  
+                  const updatedSource = {
+                    ...selectedSource,
+                    normalizationDraft: {
+                      updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+                      updatedBy: 'Nguyễn Văn A',
+                      schema: JSON.parse(JSON.stringify(editingSchema)),
+                      applyDate: normalizationDraftInfo.applyDate,
+                      description: normalizationDraftInfo.description
+                    }
+                  };
+                  
+                  setSelectedSource(updatedSource);
+                  setSources(prev => prev.map(s => s.id === selectedSource.id ? updatedSource : s));
+                  
+                  setIsNormalizationDraftModalOpen(false);
+                  setIsEditingSchema(false);
+                  showNotification('Đã lưu bản nháp thành công.');
+                }}
+                className="px-10 py-3 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-all disabled:opacity-50"
+              >
+                Lưu bản nháp
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
 
   const renderEditRestrictedModal = () => {
     return (
@@ -5255,7 +5739,7 @@ export default function App() {
                   Không thể chỉnh sửa
                 </h3>
                 <p className="text-lg text-gray-500 mb-10 leading-relaxed">
-                  Dịch vụ dữ liệu đang được <span className="font-bold text-blue-600">kích hoạt</span>. Để chỉnh sửa cấu hình, vui lòng <span className="font-bold text-red-600">vô hiệu hóa</span> dịch vụ trước.
+                  Dịch vụ dữ liệu đang được <span className="font-bold text-blue-600">kích hoạt</span>. Để chỉnh sửa cấu hình, vui lòng <span className="font-bold text-red-600">xóa cấu hình dịch vụ trích rút dữ liệu</span> trước.
                 </p>
               </div>
 
@@ -5307,7 +5791,7 @@ export default function App() {
               )}
             >
               <Power size={16} />
-              {selectedSource.status === 'connected' ? 'Vô hiệu hóa dịch vụ' : 'Kích hoạt dịch vụ'}
+              {selectedSource.status === 'connected' ? 'Xóa cấu hình dịch vụ trích rút dữ liệu' : 'Kích hoạt cấu hình dịch vụ trích rút dữ liệu'}
             </button>
           </div>
         </div>
@@ -5321,13 +5805,13 @@ export default function App() {
             status: 'success',
             startTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
             modifiedBy: 'Nguyễn Văn A',
-            changeDescription: `Cập nhật thông tin cơ bản & xác thực cho dịch vụ "${serviceBasicInfo.name}".`
+            changeDescription: `Cập nhật thông tin cơ bản cho dịch vụ "${serviceBasicInfo.name}".`
           };
           setEventLogs(prev => [newLog, ...prev]);
-          showNotification('Đã cập nhật thông tin cơ bản & xác thực thành công.');
+          showNotification('Đã cập nhật thông tin cơ bản thành công.');
           setDetailTab('overview');
         }
-      }, 'Xác nhận lưu thông tin cơ bản', 'Bạn có chắc chắn muốn lưu các thay đổi đối với thông tin cơ bản và xác thực không?')}
+      }, 'Xác nhận lưu thông tin cơ bản', 'Bạn có chắc chắn muốn lưu các thay đổi đối với thông tin cơ bản không?')}
       
       {renderSaveConfirmModal(isSaveReconInfoConfirmOpen, setIsSaveReconInfoConfirmOpen, () => {
         if (selectedSource) {
@@ -5399,18 +5883,34 @@ export default function App() {
                         <Database size={20} className="text-blue-600" />
                         Dịch vụ kiểm tra phục vụ chuẩn hóa dữ liệu
                       </div>
-                      <Switch 
-                        enabled={!!selectedSource.isNormalizationEnabled} 
-                        onChange={() => setIsNormalizationConfirmOpen(true)} 
-                      />
+                      {selectedSource.isNormalizationEnabled ? (
+                        <button 
+                          onClick={() => setIsNormalizationConfirmOpen(true)}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors flex items-center gap-2 border border-red-100"
+                          title="Xóa cấu hình"
+                        >
+                          <Trash2 size={14} />
+                          Xóa cấu hình
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => setIsNormalizationConfirmOpen(true)}
+                          className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 border border-blue-100"
+                          title="Kích hoạt cấu hình"
+                        >
+                          <Power size={14} />
+                          Kích hoạt cấu hình
+                        </button>
+                      )}
                     </div>
                     <button 
                       onClick={() => {
                         if (selectedSource.status === 'connected') {
                           setIsEditRestrictedOpen(true);
+                        } else if (selectedSource.normalizationDraft) {
+                          showNotification('Đã tồn tại một bản nháp cho cấu hình này. Vui lòng kiểm tra lại.');
                         } else {
-                          setEditingSchema(selectedSource.schema || []);
-                          setIsEditingSchema(true);
+                          setIsDraftSelectionModalOpen(true);
                         }
                       }}
                       className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -5456,7 +5956,7 @@ export default function App() {
                                   <div className="space-y-1">
                                     {field.conditions?.map((cond) => (
                                       <div key={cond.id} className="text-[10px] text-gray-500 bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                                        <span className="font-bold text-gray-700">{cond.type}:</span> {cond.errorMessage}
+                                        <span className="font-bold text-gray-700">{cond.type}</span>
                                       </div>
                                     ))}
                                     {(!field.conditions || field.conditions.length === 0) && <span className="text-gray-300 italic text-[10px]">Không có</span>}
@@ -5483,7 +5983,7 @@ export default function App() {
                                     <div className="space-y-1">
                                       {child.conditions?.map((cond) => (
                                         <div key={cond.id} className="text-[10px] text-gray-500 bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                                          <span className="font-bold text-gray-700">{cond.type}:</span> {cond.errorMessage}
+                                          <span className="font-bold text-gray-700">{cond.type}</span>
                                         </div>
                                       ))}
                                       {(!child.conditions || child.conditions.length === 0) && <span className="text-gray-300 italic text-[10px]">Không có</span>}
@@ -5495,6 +5995,72 @@ export default function App() {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+
+                    <div className="mt-8 space-y-4">
+                      <div className="text-sm font-bold text-gray-700">Bản draft thay đổi tiêu chí kiểm tra chuẩn hóa dữ liệu</div>
+                      <div className="overflow-x-auto border border-amber-100 rounded-xl bg-amber-50/30">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-amber-50/50 text-amber-900/60 text-[10px] uppercase font-bold">
+                            <tr>
+                              <th className="px-4 py-3 whitespace-nowrap">Thời gian cập nhật</th>
+                              <th className="px-4 py-3 whitespace-nowrap">Ngày áp dụng</th>
+                              <th className="px-4 py-3 whitespace-nowrap">Người cập nhật</th>
+                              <th className="px-4 py-3 text-right">Thao tác</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedSource.normalizationDraft ? (
+                              <tr className="hover:bg-amber-50/50 transition-colors">
+                                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{selectedSource.normalizationDraft.updatedAt}</td>
+                                <td className="px-4 py-3 font-medium text-blue-600 whitespace-nowrap">{selectedSource.normalizationDraft.applyDate || 'N/A'}</td>
+                                <td className="px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{selectedSource.normalizationDraft.updatedBy}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex justify-end gap-2">
+                                    <button 
+                                      onClick={() => {
+                                        setViewingDraft(selectedSource.normalizationDraft);
+                                        setIsDraftDetailModalOpen(true);
+                                      }}
+                                      className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                                      title="Xem chi tiết"
+                                    >
+                                      <Eye size={16} />
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setEditingSchema(selectedSource.normalizationDraft?.schema || []);
+                                        setIsEditingSchema(true);
+                                        setIsStartingNewSchema(false);
+                                      }}
+                                      className="p-1.5 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
+                                      title="Sửa"
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        if (!selectedSource) return;
+                                        const updatedSource = {
+                                          ...selectedSource,
+                                          normalizationDraft: undefined
+                                        };
+                                        setSelectedSource(updatedSource);
+                                        setSources(prev => prev.map(s => s.id === selectedSource.id ? updatedSource : s));
+                                        showNotification('Đã xóa bản nháp thành công.');
+                                      }}
+                                      className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                                      title="Xóa"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -5894,7 +6460,8 @@ export default function App() {
                   <table className="w-full text-left">
                     <thead className="bg-gray-50/50 text-gray-500 text-[10px] uppercase font-bold sticky top-0 bg-white z-10">
                       <tr>
-                        <th className="px-6 py-3">Tên phiên bản</th>
+                        <th className="px-6 py-3">Phiên bản</th>
+                        <th className="px-6 py-3">Mô tả thay đổi</th>
                         <th className="px-6 py-3">Thời gian cập nhật</th>
                         <th className="px-6 py-3">Người cập nhật</th>
                         <th className="px-6 py-3 text-right">Thao tác</th>
@@ -5912,15 +6479,16 @@ export default function App() {
                           return vTime >= start && vTime <= end;
                         })
                         .slice((versionCurrentPage - 1) * 10, versionCurrentPage * 10)
-                        .map((v) => (
+                        .map((v, idx) => (
                         <tr 
                           key={v.id} 
                           className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
                           onClick={() => setSelectedVersionSnapshot(v)}
                         >
                           <td className="px-6 py-4 text-xs font-bold text-gray-900">
-                            {v.versionName || `Phiên bản v${v.version}`}
+                             {`Phiên bản ${selectedSource.schemaVersions!.length - ((versionCurrentPage - 1) * 10 + idx)}`}
                           </td>
+                          <td className="px-6 py-4 text-xs text-gray-500 max-w-[200px] truncate">{v.description}</td>
                           <td className="px-6 py-4 text-xs text-gray-500">{v.createdAt}</td>
                           <td className="px-6 py-4 text-xs text-gray-600 font-medium">{v.createdBy}</td>
                           <td className="px-6 py-4 text-right">
@@ -5965,10 +6533,10 @@ export default function App() {
 
             {detailTab === 'edit' && (
               <div className="space-y-6">
-                {/* 1. Thông tin cơ bản & Xác thực */}
+                {/* 1. Thông tin cơ bản */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
                   <div className="flex items-center gap-2 mb-2 pb-4 border-b border-gray-50">
-                    <h3 className="font-bold text-lg">Thông tin cơ bản & Xác thực</h3>
+                    <h3 className="font-bold text-lg">Thông tin cơ bản</h3>
                   </div>
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-4">
@@ -6061,12 +6629,21 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">API key</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">API Public</label>
+                        <input 
+                          type="text" 
+                          readOnly
+                          value={serviceBasicInfo.apiPublic}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed outline-none font-mono text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
                         <div className="relative">
                           <input 
                             type={showApiKey ? "text" : "password"}
                             readOnly
-                            value={serviceBasicInfo.secret}
+                            value={serviceBasicInfo.apiKey}
                             className="w-full px-4 py-2 pr-10 rounded-lg border border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed outline-none"
                           />
                           <button
@@ -6201,9 +6778,112 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-gray-100">
-                  <h3 className="font-bold mb-4">Tags</h3>
-                  <button className="text-blue-600 text-sm font-medium hover:underline">+ Thêm tags</button>
+                <div className="pt-6 border-t border-gray-100 group">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-bold">Tags</h3>
+                    {!isEditingTags && (
+                      <button 
+                        onClick={() => {
+                          setEditingTags(selectedSource.tags || []);
+                          setIsEditingTags(true);
+                        }}
+                        className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-blue-600 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Sửa"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {isEditingTags ? (
+                    <div className="space-y-2">
+                      <div className="relative min-h-[42px] w-full p-2 bg-white border-2 border-blue-500 rounded flex flex-wrap gap-2 items-center transition-all shadow-sm">
+                        {editingTags.map((tag, idx) => (
+                          <span key={idx} className="flex items-center gap-1.5 px-2 py-1 bg-[#deebff] text-[#0747a6] rounded-sm text-xs font-medium border border-[#b3d4ff]">
+                            {tag}
+                            <button 
+                              onClick={() => setEditingTags(editingTags.filter((_, i) => i !== idx))}
+                              className="hover:text-red-500 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                        <input 
+                          type="text"
+                          autoFocus
+                          value={newTagInput}
+                          onChange={(e) => setNewTagInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && newTagInput.trim()) {
+                              e.preventDefault();
+                              if (!editingTags.includes(newTagInput.trim())) {
+                                setEditingTags([...editingTags, newTagInput.trim()]);
+                              }
+                              setNewTagInput('');
+                            } else if (e.key === 'Backspace' && !newTagInput && editingTags.length > 0) {
+                              setEditingTags(editingTags.slice(0, -1));
+                            } else if (e.key === 'Escape') {
+                              setIsEditingTags(false);
+                              setNewTagInput('');
+                            }
+                          }}
+                          placeholder={editingTags.length === 0 ? "Thêm nhãn..." : ""}
+                          className="flex-1 min-w-[120px] bg-transparent outline-none text-sm placeholder:text-gray-400"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 justify-end">
+                        <button 
+                          onClick={() => {
+                            if (selectedSource) {
+                              setSelectedSource({
+                                ...selectedSource,
+                                tags: editingTags
+                              });
+                              setSources(prev => prev.map(s => s.id === selectedSource.id ? { ...s, tags: editingTags } : s));
+                              setIsEditingTags(false);
+                              setNewTagInput('');
+                              showNotification('Đã cập nhật nhãn thành công.');
+                            }
+                          }}
+                          className="w-8 h-8 flex items-center justify-center bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 shadow-sm transition-all"
+                          title="Lưu"
+                        >
+                          <Check size={16} strokeWidth={3} />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setIsEditingTags(false);
+                            setNewTagInput('');
+                          }}
+                          className="w-8 h-8 flex items-center justify-center bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 transition-all"
+                          title="Hủy"
+                        >
+                          <X size={16} strokeWidth={3} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 min-h-[32px] items-center">
+                      {selectedSource.tags && selectedSource.tags.length > 0 ? (
+                        selectedSource.tags.map((tag, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-[#f4f5f7] text-[#42526e] rounded-sm text-xs font-bold border border-gray-200">
+                            {tag}
+                          </span>
+                        ))
+                      ) : (
+                        <button 
+                          onClick={() => {
+                            setEditingTags([]);
+                            setIsEditingTags(true);
+                          }}
+                          className="text-gray-400 text-xs hover:text-blue-600 italic transition-colors"
+                        >
+                          Chưa có nhãn...
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-6 border-t border-gray-100">
@@ -6462,7 +7142,6 @@ export default function App() {
       {renderReconciliationDetailModal()}
       {renderExtractionDetailModal()}
       {renderDeleteConfirmationModal()}
-      {renderSaveAsNewVersionModal()}
       
       {/* Delete Condition Confirmation Modal */}
       <AnimatePresence>
@@ -6551,6 +7230,9 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+      {renderDraftSelectionModal()}
+      {renderDraftDetailModal()}
+      {renderNormalizationDraftModal()}
       {renderNormalizationConfirmModal()}
       {renderReconciliationConfirmModal()}
       {renderNotification()}

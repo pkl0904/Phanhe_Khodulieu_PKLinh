@@ -80,6 +80,8 @@ export interface SourceDatabase {
   lastUpdated: string;
   type: string;
   api?: string;
+  apiPublic?: string;
+  apiKey?: string;
   tableCount: number;
   syncs: SyncItem[];
   whitelist: string[];
@@ -90,6 +92,13 @@ export interface SourceDatabase {
   tags?: string[];
   isNormalizationEnabled?: boolean;
   isReconciliationEnabled?: boolean;
+  normalizationDraft?: {
+    updatedAt: string;
+    updatedBy: string;
+    schema: SchemaField[];
+    applyDate: string;
+    description: string;
+  };
 }
 
 export interface EventLog {
@@ -118,6 +127,7 @@ export interface ExtractionRecord {
   startTime: string;
   endTime: string;
   processingTime: string;
+  size?: number; // bytes
   payload?: string;
   response?: string;
   errorMessage?: string;
@@ -130,6 +140,7 @@ export interface ReconciliationRecord {
   recordId: string;
   status: ReconciliationStatus;
   processingTime: string;
+  size?: number; // bytes
   startTime: string;
   endTime: string;
   waitTime: string;
